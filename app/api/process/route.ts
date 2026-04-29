@@ -252,7 +252,7 @@ ${eventsText}
   }
 }
 
-// 阶段三：生成漫画九宫格
+// 阶段三：生成漫画九宫格（使用图像编辑 API）
 async function processPhase3(
   apiKey: string,
   baseUrl: string,
@@ -263,28 +263,21 @@ async function processPhase3(
   gridImageUrl: string
 ): Promise<string> {
   
-  // 构建分镜 prompt 文本
-  const panelsText = comicPanels.map(p => 
-    `第${p.panel_id}格: ${p.prompt}`
-  ).join('\n')
+  // 构建精简的分镜描述（每个分镜限制在短语级别）
+  const panelsBrief = comicPanels.slice(0, 9).map(p => {
+    // 截取每个 prompt 的前30字符
+    const brief = p.prompt.length > 30 ? p.prompt.substring(0, 30) + '...' : p.prompt
+    return `${p.panel_id}:${brief}`
+  }).join(';')
 
-  const userPrompt = `请根据以下内容生成一张九宫格漫画图片：
+  // 构建精简 prompt（限制在 500 字符以内）
+  // 阶跃星辰图像编辑 API 的 prompt 限制为 512 字符
+  const diaryBrief = diaryText.length > 150 ? diaryText.substring(0, 150) + '...' : diaryText
+  
+  const editPrompt = `将这张九宫格照片转换为统一的日系漫画风格。保持原有构图和人物特征。日记摘要:${diaryBrief}`
 
-**日记内容：**
-${diaryText}
-
-**分镜 Prompt：**
-${panelsText}
-
-同时附上了九宫格参考图片，请参考其中的场景和人物特征进行漫画创作。
-
-要求：
-1. 输出一张完整的 3x3 九宫格漫画图片
-2. 保持统一的卡通/日系风格
-3. 人物外观在各格中保持一致
-4. 每格清晰表达对应的事件内容`
-
-  const response = await fetch(`${baseUrl}/images/generations`, {
+  // 使用图像编辑 API（阶跃星辰的 step-image-edit）
+  const response = await fetch(`${baseUrl}/images/edits`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -292,18 +285,45 @@ ${panelsText}
     },
     body: JSON.stringify({
       model,
-      prompt: `${systemPrompt}\n\n${userPrompt}`,
+      image: gridImageUrl,  // 九宫格原图作为输入
+      prompt: editPrompt,
       n: 1,
       size: '1024x1024',
-      // 如果 API 支持参考图片
-      ...(gridImageUrl ? { image: gridImageUrl } : {}),
     }),
   })
 
   if (!response.ok) {
     const error = await response.text()
     console.error(`[v0] 阶段三 API错误: ${error}`)
-    throw new Error(`阶段三 API 调用失败 (${response.status}): ${error}`)
+    
+    // 如果编辑 API 失败，尝试使用生成 API
+    console.log('[v0] 尝试使用图像生成 API 作为备选...')
+    const fallbackResponse = await fetch(`${baseUrl}/images/generations`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        prompt: editPrompt,
+        n: 1,
+        size: '1024x1024',
+      }),
+    })
+    
+    if (!fallbackResponse.ok) {
+      const fallbackError = await fallbackResponse.text()
+      console.error(`[v0] 备选图像生成 API 也失败: ${fallbackError}`)
+      throw new Error(`阶段三 API 调用失败: ${error}`)
+    }
+    
+    const fallbackData = await fallbackResponse.json()
+    const fallbackUrl = fallbackData.data?.[0]?.url || fallbackData.data?.[0]?.b64_json
+    if (!fallbackUrl) {
+      throw new Error('阶段三未返回图片')
+    }
+    return fallbackUrl
   }
 
   const data = await response.json()

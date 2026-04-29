@@ -89,9 +89,23 @@ export default function Home() {
     return result.url
   }
 
+  // 将时间字符串转换为可排序的格式（支持多种格式）
+  const normalizeTimeForSort = (timeStr: string): string => {
+    if (!timeStr) return '0000-00-00 00:00:00'
+    // 如果已经是 YYYY-MM-DD HH:MM:SS 格式
+    if (/^\d{4}-\d{2}-\d{2}/.test(timeStr)) {
+      return timeStr
+    }
+    // 如果是 HH:MM:SS 或 MM:SS 格式
+    if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(timeStr)) {
+      return `0000-00-00 ${timeStr.padStart(8, '0')}`
+    }
+    return timeStr
+  }
+
   // 提取高光帧（按视频时间+高光帧时间命名，并收集时间信息用于排序）
-  const extractHighlightFrames = useCallback(async (eventList: EventUnit[]): Promise<{ url: string; sortKey: string }[]> => {
-    const frameData: { url: string; sortKey: string; index: number }[] = []
+  const extractHighlightFrames = useCallback(async (eventList: EventUnit[]): Promise<{ url: string; sortKey: string; eventIndex: number }[]> => {
+    const frameData: { url: string; sortKey: string; eventIndex: number }[] = []
     const newFrames = new Map<number, string>()
     
     for (let i = 0; i < eventList.length; i++) {
@@ -106,20 +120,21 @@ export default function Home() {
           newFrames.set(i, frameDataUrl)
           
           // 按视频时间+高光帧时间命名
-          // 格式: frame_视频时间戳_高光帧时间.jpg
+          // 视频时间：事件发生时间 (如 2024-01-15 10:30:00)
+          // 高光帧时间：视频内的时间点 (如 00:15)
           const videoTime = event.time || '00:00:00'
           const highlightTime = event.highlight_frame || '00:00'
-          const safeVideoTime = videoTime.replace(/[:/]/g, '-')
+          // 文件名格式: frame_视频时间_高光帧时间.jpg
+          const safeVideoTime = videoTime.replace(/[:/\s]/g, '-')
           const safeHighlightTime = highlightTime.replace(/[:/]/g, '-')
           const filename = `frame_${safeVideoTime}_${safeHighlightTime}.jpg`
           
           const uploadedUrl = await uploadImageToBlob(frameDataUrl, filename)
           
-          // 计算排序键（用于后续按时间排序）
-          // 排序键 = 视频时间 + 高光帧时间
-          const sortKey = `${videoTime}_${highlightTime}`
+          // 计算排序键：视频时间 + 高光帧时间（用于按时间顺序排列）
+          const sortKey = `${normalizeTimeForSort(videoTime)}_${highlightTime.padStart(5, '0')}`
           
-          frameData.push({ url: uploadedUrl, sortKey, index: i })
+          frameData.push({ url: uploadedUrl, sortKey, eventIndex: i })
           
           // 更新事件的 extractedFrameUrl
           eventList[i] = { ...event, extractedFrameUrl: uploadedUrl }
@@ -134,10 +149,10 @@ export default function Home() {
     
     setExtractedFrames(newFrames)
     
-    // 按时间排序
+    // 按时间排序（视频时间 + 高光帧时间）
     frameData.sort((a, b) => a.sortKey.localeCompare(b.sortKey))
     
-    return frameData.map(f => ({ url: f.url, sortKey: f.sortKey }))
+    return frameData
   }, [])
 
   // 创建九宫格图片（传入已排序的帧URL列表）
@@ -311,25 +326,28 @@ export default function Home() {
       toast.info(`正在从视频中提取高光帧... (共 ${eventsWithVideo.length} 个事件)`)
       const sortedFrameData = await extractHighlightFrames(eventList)
       
-      // 更新 events 状态（包含 extractedFrameUrl）
-      setEvents([...eventList])
-      
       if (sortedFrameData.length === 0) {
         toast.error('没有成功提取任何高光帧，请检查视频格式是否支持浏览器播放')
         throw new Error('高光帧提取失败')
       }
       
+      // 根据排序后的帧数据重排事件列表（确保日记时间顺序正确）
+      const sortedEventList = sortedFrameData.map(f => eventList[f.eventIndex])
+      
+      // 更新 events 状态（按时间排序后的事件）
+      setEvents([...sortedEventList])
+      
       // 提取已排序的 URL 列表
       const sortedFrameUrls = sortedFrameData.map(f => f.url)
       
-      // 阶段二：生成日记和分镜（传入高光帧图片）
-      await runPhase2(eventList, sortedFrameUrls)
+      // 阶段二：生成日记和分镜（传入按时间排序的事件和高光帧）
+      await runPhase2(sortedEventList, sortedFrameUrls)
       
       // 阶段二完成后，按时间顺序创建九宫格图片（用于阶段三）
       await createAndUploadGridImage(sortedFrameUrls)
       
       // 注意：阶段三需要用户手动触发（因为可能需要调整分镜 prompt）
-      toast.success(`阶段一和阶段二已完成！提取了 ${eventList.length} 个事件和 ${sortedFrameData.length} 个高光帧。可以点击"生成漫画"继续阶段三`)
+      toast.success(`阶段一和阶段二已完成！提取了 ${sortedEventList.length} 个事件和 ${sortedFrameData.length} 个高光帧。可以点击"生成漫画"继续阶段三`)
       
       setVideos(videos.map(v => ({ ...v, status: 'completed' as const })))
     } catch (error) {
