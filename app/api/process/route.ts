@@ -73,32 +73,48 @@ async function processPhase1(
 
 请按照要求输出JSON格式的事件列表，确保 highlight_frame 字段使用 "MM:SS" 格式表示视频中的时间点。`
 
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: userMessage },
-            {
-              type: 'video_url',
-              video_url: {
-                url: video.videoUrl,
+  // 添加超时控制
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 120000) // 2分钟超时
+  
+  let response: Response
+  try {
+    response = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: userMessage },
+              {
+                type: 'video_url',
+                video_url: {
+                  url: video.videoUrl,
+                },
               },
-            },
-          ],
-        },
-      ],
-      max_tokens: 4000,
-    }),
-  })
+            ],
+          },
+        ],
+        max_tokens: 4000,
+      }),
+      signal: controller.signal,
+    })
+  } catch (fetchError) {
+    clearTimeout(timeoutId)
+    if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+      throw new Error('视频分析超时，请稍后重试')
+    }
+    throw fetchError
+  }
+  
+  clearTimeout(timeoutId)
 
   if (!response.ok) {
     const error = await response.text()
@@ -346,21 +362,55 @@ export async function POST(request: NextRequest) {
       
       for (let videoIndex = 0; videoIndex < videos.length; videoIndex++) {
         const video = videos[videoIndex]
-        try {
-          const events = await processPhase1(apiKey, baseUrl, visionModel, phase1Prompt, video)
-          
-          // 验证每个事件都有 videoUrl
-          events.forEach((e) => {
-            if (!e.videoUrl) {
-              e.videoUrl = video.videoUrl
-              e.videoName = video.name
+        let success = false
+        let lastError = ''
+        
+        // 重试机制：最多尝试2次
+        for (let attempt = 0; attempt < 2 && !success; attempt++) {
+          try {
+            if (attempt > 0) {
+              // 重试前等待2秒
+              await new Promise(resolve => setTimeout(resolve, 2000))
             }
+            
+            const events = await processPhase1(apiKey, baseUrl, visionModel, phase1Prompt, video)
+            
+            // 验证每个事件都有 videoUrl
+            events.forEach((e) => {
+              if (!e.videoUrl) {
+                e.videoUrl = video.videoUrl
+                e.videoName = video.name
+              }
+            })
+            
+            allEvents.push(...events)
+            success = true
+          } catch (error) {
+            lastError = error instanceof Error ? error.message : String(error)
+            if (attempt === 0 && lastError.includes('500')) {
+              // 500错误可能是临时的，尝试重试
+              console.log(`[v0] 视频 ${video.name} 处理失败，准备重试...`)
+            }
+          }
+        }
+        
+        // 如果重试后仍然失败，添加一个默认事件以确保高光帧能提取
+        if (!success) {
+          errors.push(`${video.name}: ${lastError}`)
+          // 为失败的视频添加默认事件，确保仍能提取高光帧
+          allEvents.push({
+            time: video.timestamp,
+            location: video.location || '未知位置',
+            scene: '视频片段',
+            event: `视频 ${video.name} 的内容`,
+            people: ['未知'],
+            emotion: '平静',
+            importance: 0.5,
+            highlight_frame: '00:02',
+            tags: ['视频'],
+            videoUrl: video.videoUrl,
+            videoName: video.name,
           })
-          
-          allEvents.push(...events)
-        } catch (error) {
-          const errorMsg = error instanceof Error ? error.message : String(error)
-          errors.push(`${video.name}: ${errorMsg}`)
         }
       }
 

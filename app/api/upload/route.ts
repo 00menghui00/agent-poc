@@ -10,25 +10,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '未提供文件' }, { status: 400 })
     }
 
-    // 检查文件类型
-    if (!file.type.startsWith('video/')) {
-      return NextResponse.json({ error: '只支持视频文件' }, { status: 400 })
+    // 检查文件类型 - 支持视频和图片
+    const isVideo = file.type.startsWith('video/')
+    const isImage = file.type.startsWith('image/')
+    
+    if (!isVideo && !isImage) {
+      return NextResponse.json({ error: '只支持视频或图片文件' }, { status: 400 })
     }
 
-    // 检查文件大小 (最大 100MB)
-    const maxSize = 100 * 1024 * 1024
+    // 检查文件大小 (视频最大 100MB，图片最大 10MB)
+    const maxSize = isVideo ? 100 * 1024 * 1024 : 10 * 1024 * 1024
     if (file.size > maxSize) {
-      return NextResponse.json({ error: '文件大小不能超过 100MB' }, { status: 400 })
+      return NextResponse.json({ 
+        error: `文件大小不能超过 ${isVideo ? '100MB' : '10MB'}` 
+      }, { status: 400 })
     }
 
-    console.log('[v0] Uploading video to Blob:', file.name, 'size:', file.size)
+    // 根据文件类型选择存储目录
+    const folder = isVideo ? 'videos' : 'images'
+    const filename = file.name || `${Date.now()}.${isImage ? 'jpg' : 'mp4'}`
 
     // 上传到 Vercel Blob (公开访问，因为需要传给阶跃星辰 API)
-    const blob = await put(`videos/${Date.now()}-${file.name}`, file, {
+    const blob = await put(`${folder}/${Date.now()}-${filename}`, file, {
       access: 'public',
     })
-
-    console.log('[v0] Video uploaded successfully:', blob.url)
 
     return NextResponse.json({ 
       url: blob.url,
