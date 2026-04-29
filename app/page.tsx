@@ -89,9 +89,9 @@ export default function Home() {
     return result.url
   }
 
-  // 提取高光帧
-  const extractHighlightFrames = useCallback(async (eventList: EventUnit[]): Promise<string[]> => {
-    const frameUrls: string[] = []
+  // 提取高光帧（按视频时间+高光帧时间命名，并收集时间信息用于排序）
+  const extractHighlightFrames = useCallback(async (eventList: EventUnit[]): Promise<{ url: string; sortKey: string }[]> => {
+    const frameData: { url: string; sortKey: string; index: number }[] = []
     const newFrames = new Map<number, string>()
     
     for (let i = 0; i < eventList.length; i++) {
@@ -105,10 +105,21 @@ export default function Home() {
           const frameDataUrl = await extractFrameFromVideo(event.videoUrl, timeInSeconds)
           newFrames.set(i, frameDataUrl)
           
-          // 上传到 Blob 获取 URL
-          const filename = `frame_${event.videoName || 'video'}_${Date.now()}_${i}.jpg`
+          // 按视频时间+高光帧时间命名
+          // 格式: frame_视频时间戳_高光帧时间.jpg
+          const videoTime = event.time || '00:00:00'
+          const highlightTime = event.highlight_frame || '00:00'
+          const safeVideoTime = videoTime.replace(/[:/]/g, '-')
+          const safeHighlightTime = highlightTime.replace(/[:/]/g, '-')
+          const filename = `frame_${safeVideoTime}_${safeHighlightTime}.jpg`
+          
           const uploadedUrl = await uploadImageToBlob(frameDataUrl, filename)
-          frameUrls.push(uploadedUrl)
+          
+          // 计算排序键（用于后续按时间排序）
+          // 排序键 = 视频时间 + 高光帧时间
+          const sortKey = `${videoTime}_${highlightTime}`
+          
+          frameData.push({ url: uploadedUrl, sortKey, index: i })
           
           // 更新事件的 extractedFrameUrl
           eventList[i] = { ...event, extractedFrameUrl: uploadedUrl }
@@ -122,14 +133,19 @@ export default function Home() {
     }
     
     setExtractedFrames(newFrames)
-    return frameUrls
+    
+    // 按时间排序
+    frameData.sort((a, b) => a.sortKey.localeCompare(b.sortKey))
+    
+    return frameData.map(f => ({ url: f.url, sortKey: f.sortKey }))
   }, [])
 
-  // 创建九宫格图片
-  const createAndUploadGridImage = useCallback(async (frameUrls: string[]): Promise<string> => {
-    toast.info('正在生成九宫格拼接图...')
-    const gridDataUrl = await createGridImage(frameUrls)
-    const gridUrl = await uploadImageToBlob(gridDataUrl, 'grid_image.jpg')
+  // 创建九宫格图片（传入已排序的帧URL列表）
+  const createAndUploadGridImage = useCallback(async (sortedFrameUrls: string[]): Promise<string> => {
+    toast.info('正在按时间顺序生成九宫格拼接图...')
+    const gridDataUrl = await createGridImage(sortedFrameUrls)
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const gridUrl = await uploadImageToBlob(gridDataUrl, `grid_${timestamp}.jpg`)
     setGridImageUrl(gridUrl)
     return gridUrl
   }, [])
@@ -291,26 +307,29 @@ export default function Home() {
       // 更新 events 状态（在提取高光帧前先显示）
       setEvents([...eventList])
       
-      // 提取高光帧
+      // 提取高光帧（返回按时间排序的帧数据）
       toast.info(`正在从视频中提取高光帧... (共 ${eventsWithVideo.length} 个事件)`)
-      const highlightFrameUrls = await extractHighlightFrames(eventList)
+      const sortedFrameData = await extractHighlightFrames(eventList)
       
       // 更新 events 状态（包含 extractedFrameUrl）
       setEvents([...eventList])
       
-      if (highlightFrameUrls.length === 0) {
+      if (sortedFrameData.length === 0) {
         toast.error('没有成功提取任何高光帧，请检查视频格式是否支持浏览器播放')
         throw new Error('高光帧提取失败')
       }
       
-      // 创建九宫格图片
-      const gridUrl = await createAndUploadGridImage(highlightFrameUrls)
+      // 提取已排序的 URL 列表
+      const sortedFrameUrls = sortedFrameData.map(f => f.url)
       
-      // 阶段二：生成日记和分镜
-      await runPhase2(eventList, highlightFrameUrls)
+      // 阶段二：生成日记和分镜（传入高光帧图片）
+      await runPhase2(eventList, sortedFrameUrls)
+      
+      // 阶段二完成后，按时间顺序创建九宫格图片（用于阶段三）
+      await createAndUploadGridImage(sortedFrameUrls)
       
       // 注意：阶段三需要用户手动触发（因为可能需要调整分镜 prompt）
-      toast.success(`阶段一和阶段二已完成！提取了 ${eventList.length} 个事件和 ${highlightFrameUrls.length} 个高光帧。可以点击"生成漫画"继续阶段三`)
+      toast.success(`阶段一和阶段二已完成！提取了 ${eventList.length} 个事件和 ${sortedFrameData.length} 个高光帧。可以点击"生成漫画"继续阶段三`)
       
       setVideos(videos.map(v => ({ ...v, status: 'completed' as const })))
     } catch (error) {

@@ -262,15 +262,33 @@ export function createGridImage(
 }
 
 /**
+ * 将 base64 dataUrl 转换为 Blob（带正确的 MIME 类型）
+ */
+function dataUrlToBlob(dataUrl: string): Blob {
+  const arr = dataUrl.split(',')
+  const mimeMatch = arr[0].match(/:(.*?);/)
+  const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg'
+  const bstr = atob(arr[1])
+  let n = bstr.length
+  const u8arr = new Uint8Array(n)
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n)
+  }
+  return new Blob([u8arr], { type: mime })
+}
+
+/**
  * 上传 base64 图片到 Vercel Blob
  */
 export async function uploadImageToBlob(dataUrl: string, filename: string): Promise<string> {
-  // 将 base64 转换为 Blob
-  const response = await fetch(dataUrl)
-  const blob = await response.blob()
+  // 将 base64 转换为 Blob（保留正确的 MIME 类型）
+  const blob = dataUrlToBlob(dataUrl)
+  
+  // 创建带有正确文件名和类型的 File 对象
+  const file = new File([blob], filename, { type: blob.type })
   
   const formData = new FormData()
-  formData.append('file', blob, filename)
+  formData.append('file', file)
   
   const uploadResponse = await fetch('/api/upload', {
     method: 'POST',
