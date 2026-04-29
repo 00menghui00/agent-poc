@@ -96,15 +96,17 @@ export default function Home() {
     
     for (let i = 0; i < eventList.length; i++) {
       const event = eventList[i]
+      
       if (event.videoUrl) {
         try {
           toast.info(`提取高光帧 ${i + 1}/${eventList.length}...`)
-          const timeInSeconds = parseTimeToSeconds(event.highlight_frame || '')
+          const timeInSeconds = parseTimeToSeconds(event.highlight_frame || '00:01')
+          
           const frameDataUrl = await extractFrameFromVideo(event.videoUrl, timeInSeconds)
           newFrames.set(i, frameDataUrl)
           
           // 上传到 Blob 获取 URL
-          const filename = `frame_${event.videoName || 'video'}_${event.highlight_frame || i}.jpg`
+          const filename = `frame_${event.videoName || 'video'}_${Date.now()}_${i}.jpg`
           const uploadedUrl = await uploadImageToBlob(frameDataUrl, filename)
           frameUrls.push(uploadedUrl)
           
@@ -112,7 +114,10 @@ export default function Home() {
           eventList[i] = { ...event, extractedFrameUrl: uploadedUrl }
         } catch (error) {
           console.error(`提取事件 ${i + 1} 的帧失败:`, error)
+          toast.error(`事件 ${i + 1} 高光帧提取失败: ${error instanceof Error ? error.message : '未知错误'}`)
         }
+      } else {
+        toast.warning(`事件 ${i + 1} 没有关联视频，跳过高光帧提取`)
       }
     }
     
@@ -245,40 +250,71 @@ export default function Home() {
     setVideos(videos.map(v => ({ ...v, status: 'processing' as const })))
 
     try {
-      // 上传视频到 Blob
+      // 上传视频到 Blob（串行上传避免并发问题）
       toast.info('正在上传视频...')
-      const videoData = await Promise.all(
-        videos.map(async (video, index) => {
-          toast.info(`上传视频 ${index + 1}/${videos.length}: ${video.name}`)
+      
+      const videoData: Array<{ name: string; timestamp: string; location: string; videoUrl: string }> = []
+      for (let index = 0; index < videos.length; index++) {
+        const video = videos[index]
+        toast.info(`上传视频 ${index + 1}/${videos.length}: ${video.name}`)
+        try {
           const videoUrl = await uploadVideoToBlob(video.file)
-          return {
+          videoData.push({
             name: video.name,
             timestamp: video.timestamp,
             location: video.location,
             videoUrl,
-          }
-        })
-      )
+          })
+        } catch (uploadError) {
+          console.error(`视频 ${video.name} 上传失败:`, uploadError)
+          toast.error(`视频 ${video.name} 上传失败`)
+        }
+      }
+      
+      if (videoData.length === 0) {
+        throw new Error('所有视频上传失败')
+      }
+      
+      toast.success(`成功上传 ${videoData.length}/${videos.length} 个视频`)
       
       // 阶段一：提取事件
       const eventList = await runPhase1(videoData)
       
+      // 检查事件是否都有 videoUrl
+      const eventsWithVideo = eventList.filter(e => e.videoUrl)
+      
+      if (eventsWithVideo.length === 0) {
+        toast.error('阶段一返回的事件没有关联视频URL，无法提取高光帧')
+        throw new Error('事件缺少 videoUrl')
+      }
+      
+      // 更新 events 状态（在提取高光帧前先显示）
+      setEvents([...eventList])
+      
       // 提取高光帧
-      toast.info('正在从视频中提取高光帧...')
+      toast.info(`正在从视频中提取高光帧... (共 ${eventsWithVideo.length} 个事件)`)
       const highlightFrameUrls = await extractHighlightFrames(eventList)
+      
+      // 更新 events 状态（包含 extractedFrameUrl）
+      setEvents([...eventList])
+      
+      if (highlightFrameUrls.length === 0) {
+        toast.error('没有成功提取任何高光帧，请检查视频格式是否支持浏览器播放')
+        throw new Error('高光帧提取失败')
+      }
       
       // 创建九宫格图片
       const gridUrl = await createAndUploadGridImage(highlightFrameUrls)
       
       // 阶段二：生成日记和分镜
-      const p2Result = await runPhase2(eventList, highlightFrameUrls)
+      await runPhase2(eventList, highlightFrameUrls)
       
       // 注意：阶段三需要用户手动触发（因为可能需要调整分镜 prompt）
-      toast.success('阶段一和阶段二已完成！可以点击"生成漫画"继续阶段三')
+      toast.success(`阶段一和阶段二已完成！提取了 ${eventList.length} 个事件和 ${highlightFrameUrls.length} 个高光帧。可以点击"生成漫画"继续阶段三`)
       
       setVideos(videos.map(v => ({ ...v, status: 'completed' as const })))
     } catch (error) {
-      console.error('处理失败:', error)
+      console.error('[v0] 处理失败:', error)
       toast.error(error instanceof Error ? error.message : '处理失败，请重试')
       setVideos(videos.map(v => ({ ...v, status: 'error' as const })))
     } finally {

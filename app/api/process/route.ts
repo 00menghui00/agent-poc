@@ -65,7 +65,6 @@ async function processPhase1(
   systemPrompt: string,
   video: VideoInput
 ): Promise<EventUnit[]> {
-  console.log(`[v0] 阶段一：开始处理视频: ${video.name}`)
   
   const userMessage = `请分析这个视频：
 - 文件名：${video.name}
@@ -125,10 +124,9 @@ async function processPhase1(
       videoUrl: video.videoUrl,
       videoName: video.name,
     }))
-    console.log(`[v0] 阶段一完成，提取 ${events.length} 个事件`)
     return events
   } catch {
-    console.error('[v0] JSON 解析失败:', content.substring(0, 500))
+    // 返回默认事件，确保有 videoUrl
     return [{
       time: video.timestamp,
       location: video.location || '未知位置',
@@ -154,7 +152,6 @@ async function processPhase2(
   events: EventUnit[],
   highlightFrameUrls: string[]
 ): Promise<Phase2Result> {
-  console.log(`[v0] 阶段二：开始生成日记和分镜，事件数: ${events.length}，高光帧数: ${highlightFrameUrls.length}`)
   
   // 构建事件列表文本
   const eventsText = events.map((e, i) => 
@@ -220,19 +217,14 @@ ${eventsText}
   const data = await response.json()
   const content = data.choices?.[0]?.message?.content || ''
   
-  console.log(`[v0] 阶段二返回内容长度: ${content.length}`)
-  
   // 解析 JSON 结果
   try {
     const jsonMatch = content.match(/\{[\s\S]*\}/)
     if (jsonMatch) {
-      const result = JSON.parse(jsonMatch[0])
-      console.log(`[v0] 阶段二完成，日记长度: ${result.diary_text?.length || 0}，分镜数: ${result.comic_panels?.length || 0}`)
-      return result
+      return JSON.parse(jsonMatch[0])
     }
     throw new Error('无法解析 JSON')
   } catch {
-    console.error('[v0] 阶段二 JSON 解析失败:', content.substring(0, 500))
     // 返回基础结构
     return {
       diary_text: content,
@@ -254,7 +246,6 @@ async function processPhase3(
   comicPanels: ComicPanel[],
   gridImageUrl: string
 ): Promise<string> {
-  console.log(`[v0] 阶段三：开始生成漫画，分镜数: ${comicPanels.length}`)
   
   // 构建分镜 prompt 文本
   const panelsText = comicPanels.map(p => 
@@ -306,13 +297,10 @@ ${panelsText}
     throw new Error('阶段三未返回图片')
   }
   
-  console.log(`[v0] 阶段三完成，生成漫画图片`)
   return imageUrl
 }
 
 export async function POST(request: NextRequest) {
-  console.log('[v0] 收到处理请求')
-  
   try {
     const body: ProcessRequest = await request.json()
     
@@ -332,8 +320,6 @@ export async function POST(request: NextRequest) {
       phase2Result: existingPhase2Result,
       existingEvents,
     } = body
-
-    console.log(`[v0] 配置: baseUrl=${baseUrl}, runPhase=${runPhase || 'all'}`)
 
     if (!apiKey) {
       return NextResponse.json({ error: '请提供 API Key' }, { status: 400 })
@@ -357,13 +343,23 @@ export async function POST(request: NextRequest) {
       }
 
       allEvents = []
-      for (const video of videos) {
+      
+      for (let videoIndex = 0; videoIndex < videos.length; videoIndex++) {
+        const video = videos[videoIndex]
         try {
           const events = await processPhase1(apiKey, baseUrl, visionModel, phase1Prompt, video)
+          
+          // 验证每个事件都有 videoUrl
+          events.forEach((e) => {
+            if (!e.videoUrl) {
+              e.videoUrl = video.videoUrl
+              e.videoName = video.name
+            }
+          })
+          
           allEvents.push(...events)
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : String(error)
-          console.error(`[v0] 视频 ${video.name} 处理失败:`, errorMsg)
           errors.push(`${video.name}: ${errorMsg}`)
         }
       }
@@ -442,8 +438,6 @@ export async function POST(request: NextRequest) {
         errors.push(`阶段三: ${errorMsg}`)
       }
     }
-
-    console.log('[v0] 处理完成')
     
     return NextResponse.json({
       success: true,

@@ -71,7 +71,7 @@ export function extractFrameFromVideo(
 
     const onError = () => {
       cleanup()
-      reject(new Error(`无法加载视频: ${videoUrl}`))
+      reject(new Error(`无法加载视频: ${videoUrl.substring(0, 100)}...`))
     }
 
     const onSeeked = () => {
