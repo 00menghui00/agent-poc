@@ -252,7 +252,7 @@ ${eventsText}
   }
 }
 
-// 阶段三：生成漫画九宫格（使用图像编辑 API）
+// 阶段三：生成漫画九宫格（使用图像编辑 API，multipart/form-data 格式）
 async function processPhase3(
   apiKey: string,
   baseUrl: string,
@@ -263,73 +263,52 @@ async function processPhase3(
   gridImageUrl: string
 ): Promise<string> {
   
-  // 构建精简的分镜描述（每个分镜限制在短语级别）
-  const panelsBrief = comicPanels.slice(0, 9).map(p => {
-    // 截取每个 prompt 的前30字符
-    const brief = p.prompt.length > 30 ? p.prompt.substring(0, 30) + '...' : p.prompt
-    return `${p.panel_id}:${brief}`
-  }).join(';')
-
   // 构建精简 prompt（限制在 500 字符以内）
   // 阶跃星辰图像编辑 API 的 prompt 限制为 512 字符
-  const diaryBrief = diaryText.length > 150 ? diaryText.substring(0, 150) + '...' : diaryText
+  const diaryBrief = diaryText.length > 200 ? diaryText.substring(0, 200) + '...' : diaryText
   
-  const editPrompt = `将这张九宫格照片转换为统一的日系漫画风格。保持原有构图和人物特征。日记摘要:${diaryBrief}`
+  const editPrompt = `将这张九宫格照片转换为统一的日系漫画风格。保持原有构图和人物特征。${diaryBrief}`
+  
+  // 确保 prompt 不超过 512 字符
+  const finalPrompt = editPrompt.length > 500 ? editPrompt.substring(0, 500) : editPrompt
+
+  // 先下载九宫格图片
+  const imageResponse = await fetch(gridImageUrl)
+  if (!imageResponse.ok) {
+    throw new Error(`无法下载九宫格图片: ${gridImageUrl}`)
+  }
+  const imageBlob = await imageResponse.blob()
+  
+  // 构建 multipart/form-data 请求
+  const formData = new FormData()
+  formData.append('model', model)
+  formData.append('image', imageBlob, 'grid.jpg')
+  formData.append('prompt', finalPrompt)
+  formData.append('response_format', 'url')
+  formData.append('cfg_scale', '3.0')
+  formData.append('steps', '20')
 
   // 使用图像编辑 API（阶跃星辰的 step-image-edit）
   const response = await fetch(`${baseUrl}/images/edits`, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`,
+      // 不设置 Content-Type，让浏览器自动设置 multipart/form-data 边界
     },
-    body: JSON.stringify({
-      model,
-      image: gridImageUrl,  // 九宫格原图作为输入
-      prompt: editPrompt,
-      n: 1,
-      size: '1024x1024',
-    }),
+    body: formData,
   })
 
   if (!response.ok) {
     const error = await response.text()
     console.error(`[v0] 阶段三 API错误: ${error}`)
-    
-    // 如果编辑 API 失败，尝试使用生成 API
-    console.log('[v0] 尝试使用图像生成 API 作为备选...')
-    const fallbackResponse = await fetch(`${baseUrl}/images/generations`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        prompt: editPrompt,
-        n: 1,
-        size: '1024x1024',
-      }),
-    })
-    
-    if (!fallbackResponse.ok) {
-      const fallbackError = await fallbackResponse.text()
-      console.error(`[v0] 备选图像生成 API 也失败: ${fallbackError}`)
-      throw new Error(`阶段三 API 调用失败: ${error}`)
-    }
-    
-    const fallbackData = await fallbackResponse.json()
-    const fallbackUrl = fallbackData.data?.[0]?.url || fallbackData.data?.[0]?.b64_json
-    if (!fallbackUrl) {
-      throw new Error('阶段三未返回图片')
-    }
-    return fallbackUrl
+    throw new Error(`阶段三 API 调用失败 (${response.status}): ${error}`)
   }
 
   const data = await response.json()
-  const imageUrl = data.data?.[0]?.url || data.data?.[0]?.b64_json
+  const imageUrl = data.data?.[0]?.url || data.images?.[0]?.url
   
   if (!imageUrl) {
+    console.error('[v0] 阶段三返回数据:', JSON.stringify(data))
     throw new Error('阶段三未返回图片')
   }
   
