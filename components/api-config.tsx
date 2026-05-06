@@ -5,7 +5,14 @@ import { Settings, Eye, EyeOff, Save, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { DEFAULT_API_CONFIG, type APIConfig } from "@/lib/store"
 
 interface APIConfigProps {
@@ -16,6 +23,7 @@ interface APIConfigProps {
 export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
   const [showApiKey, setShowApiKey] = useState(false)
   const [localConfig, setLocalConfig] = useState<APIConfig>(config)
+  const [open, setOpen] = useState(false)
 
   useEffect(() => {
     setLocalConfig(config)
@@ -25,6 +33,7 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
     onConfigChange(localConfig)
     // 保存到 localStorage
     localStorage.setItem('api-config', JSON.stringify(localConfig))
+    setOpen(false)
   }
 
   const handleReset = () => {
@@ -34,17 +43,23 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Settings className="h-5 w-5" />
-          API 配置
-        </CardTitle>
-        <CardDescription>
-          配置阶跃星辰 API 连接参数
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+          <Settings className="h-4 w-4" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Settings className="h-5 w-5" />
+            API 配置
+          </DialogTitle>
+          <DialogDescription>
+            配置阶跃星辰和豆包 API 连接参数
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 pt-2">
         <div className="space-y-2">
           <Label htmlFor="apiKey">API Key</Label>
           <div className="relative">
@@ -149,7 +164,8 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
             重置
           </Button>
         </div>
-      </CardContent>
-    </Card>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
