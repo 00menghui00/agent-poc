@@ -263,11 +263,17 @@ async function processPhase3(
   gridImageUrl: string
 ): Promise<string> {
   
+  // 构建分镜描述（精简版，每个分镜用关键词）
+  const panelKeywords = comicPanels.slice(0, 9).map(p => {
+    // 提取每个分镜的关键词（限制15字符）
+    const keywords = p.prompt.substring(0, 15)
+    return `${p.panel_id}:${keywords}`
+  }).join(',')
+  
   // 构建精简 prompt（限制在 500 字符以内）
   // 阶跃星辰图像编辑 API 的 prompt 限制为 512 字符
-  const diaryBrief = diaryText.length > 200 ? diaryText.substring(0, 200) + '...' : diaryText
-  
-  const editPrompt = `将这张九宫格照片转换为统一的日系漫画风格。保持原有构图和人物特征。${diaryBrief}`
+  // 包含：漫画风格指令 + 分镜关键词 + 要求添加文字气泡
+  const editPrompt = `转为日系漫画风格,添加对话气泡和拟声词,保持人物特征。分镜:${panelKeywords}`
   
   // 确保 prompt 不超过 512 字符
   const finalPrompt = editPrompt.length > 500 ? editPrompt.substring(0, 500) : editPrompt

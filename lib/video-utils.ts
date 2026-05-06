@@ -242,14 +242,12 @@ export function createGridImage(
 
     Promise.all(urls.map(loadImage))
       .then(images => {
-        const gap = 4 // 图片间隙
-
         images.forEach((img, index) => {
           const cell = layout[index]
-          const x = cell.x * unitSize + gap / 2
-          const y = cell.y * unitSize + gap / 2
-          const w = cell.w * unitSize - gap
-          const h = cell.h * unitSize - gap
+          const x = cell.x * unitSize
+          const y = cell.y * unitSize
+          const w = cell.w * unitSize
+          const h = cell.h * unitSize
 
           // 计算裁剪以保持比例并居中
           const scale = Math.max(w / img.width, h / img.height)
@@ -259,22 +257,9 @@ export function createGridImage(
           const offsetY = (scaledHeight - h) / 2
 
           ctx.save()
-          
-          // 绘制圆角矩形裁剪区域
-          const radius = 8
           ctx.beginPath()
-          ctx.moveTo(x + radius, y)
-          ctx.lineTo(x + w - radius, y)
-          ctx.quadraticCurveTo(x + w, y, x + w, y + radius)
-          ctx.lineTo(x + w, y + h - radius)
-          ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h)
-          ctx.lineTo(x + radius, y + h)
-          ctx.quadraticCurveTo(x, y + h, x, y + h - radius)
-          ctx.lineTo(x, y + radius)
-          ctx.quadraticCurveTo(x, y, x + radius, y)
-          ctx.closePath()
+          ctx.rect(x, y, w, h)
           ctx.clip()
-
           ctx.drawImage(img, x - offsetX, y - offsetY, scaledWidth, scaledHeight)
           ctx.restore()
         })
