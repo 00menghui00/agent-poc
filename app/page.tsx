@@ -273,6 +273,12 @@ export default function Home() {
       position: (panel.bubble_position || 'top-right') as BubbleInfo['position']
     }))
     
+    // 调试：检查气泡数据
+    console.log('[v0] 阶段二分镜数据:', p2Result.comic_panels)
+    console.log('[v0] 提取的气泡信息:', bubbles)
+    const hasBubbleText = bubbles.some(b => b.text && b.text.length > 0)
+    console.log('[v0] 是否有气泡文字:', hasBubbleText)
+    
     // 使用 Canvas 在漫画上添加中文气泡
     try {
       const comicWithBubbles = await addBubblesToComic(comicWithoutText, bubbles)

@@ -281,12 +281,15 @@ export async function addBubblesToComic(
     throw new Error('只能在浏览器环境中添加气泡')
   }
 
-  // 通过 fetch 下载图片绕过跨域限制
+  // 通过服务端代理下载图片绕过跨域限制
   let blobUrl: string
   try {
-    const response = await fetch(imageUrl)
+    // 使用代理 API 下载外部图片
+    const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(imageUrl)}`
+    const response = await fetch(proxyUrl)
     if (!response.ok) {
-      throw new Error(`下载图片失败: ${response.status}`)
+      const errorText = await response.text()
+      throw new Error(`下载图片失败: ${response.status} - ${errorText}`)
     }
     const blob = await response.blob()
     blobUrl = URL.createObjectURL(blob)
