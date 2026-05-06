@@ -350,6 +350,109 @@ async function processPhase3(
   return imageUrl
 }
 
+// 气泡位置信息（基于像素坐标）
+interface BubblePosition {
+  x: number // 气泡左上角 x 坐标（百分比 0-100）
+  y: number // 气泡左上角 y 坐标（百分比 0-100）
+  text: string // 气泡文字内容
+}
+
+// 阶段3.5：分析漫画图片，输出气泡位置和文字
+async function analyzeBubblePositions(
+  apiKey: string,
+  baseUrl: string,
+  model: string,
+  comicImageUrl: string,
+  diaryText: string
+): Promise<BubblePosition[]> {
+  
+  const systemPrompt = `你是一个漫画气泡位置分析专家。分析漫画图片，找出2-4个适合添加对话气泡的位置。
+
+要求：
+1. 选择人物头部附近或空白区域放置气泡
+2. 避免遮挡重要画面元素
+3. 气泡位置使用百分比坐标（0-100），表示气泡左上角在图片中的位置
+4. 为每个气泡生成简短的中文对话或内心独白（10-20字）
+5. 气泡内容应该与画面场景相符，表达人物情感
+
+输出格式（严格JSON）：
+{
+  "bubbles": [
+    {"x": 10, "y": 15, "text": "今天天气真好啊！"},
+    {"x": 60, "y": 40, "text": "我们去散步吧"},
+    ...
+  ]
+}`
+
+  const userMessage = `请分析这张漫画图片，找出2-4个适合放置对话气泡的位置。
+
+日记内容参考：${diaryText.substring(0, 200)}
+
+请输出气泡的位置坐标（百分比）和对应的中文对话内容。`
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 60000) // 1分钟超时
+  
+  let response: Response
+  try {
+    response = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: userMessage },
+              { type: 'image_url', image_url: { url: comicImageUrl } },
+            ],
+          },
+        ],
+        max_tokens: 1000,
+      }),
+      signal: controller.signal,
+    })
+  } catch (fetchError) {
+    clearTimeout(timeoutId)
+    if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+      throw new Error('气泡分析超时')
+    }
+    throw new Error(`气泡分析网络错误: ${fetchError instanceof Error ? fetchError.message : '未知错误'}`)
+  }
+  
+  clearTimeout(timeoutId)
+
+  if (!response.ok) {
+    const error = await response.text()
+    console.error(`[v0] 气泡分析 API错误: ${error}`)
+    throw new Error(`气泡分析失败 (${response.status}): ${error}`)
+  }
+
+  const data = await response.json()
+  const content = data.choices?.[0]?.message?.content || ''
+  
+  // 解析 JSON 结果
+  try {
+    const jsonMatch = content.match(/\{[\s\S]*\}/)
+    if (jsonMatch) {
+      const result = JSON.parse(jsonMatch[0])
+      return result.bubbles || []
+    }
+    throw new Error('无法解析气泡位置 JSON')
+  } catch {
+    // 返回默认气泡位置
+    return [
+      { x: 10, y: 10, text: '新的一天开始了！' },
+      { x: 60, y: 50, text: '今天过得真充实' },
+    ]
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body: ProcessRequest = await request.json()
@@ -529,11 +632,34 @@ export async function POST(request: NextRequest) {
       }
     }
     
+    // 阶段3.5：如果成功生成漫画，分析气泡位置
+    let bubblePositions: BubblePosition[] = []
+    if (comicImageUrl && phase2Result) {
+      try {
+        bubblePositions = await analyzeBubblePositions(
+          apiKey,
+          baseUrl,
+          visionModel, // 使用视觉模型分析图片
+          comicImageUrl,
+          phase2Result.diary_text
+        )
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error)
+        console.error('[v0] 气泡分析失败:', errorMsg)
+        // 气泡分析失败不影响主流程，使用默认气泡
+        bubblePositions = [
+          { x: 10, y: 10, text: '新的一天！' },
+          { x: 60, y: 50, text: '真开心' },
+        ]
+      }
+    }
+    
     return NextResponse.json({
       success: true,
       events: allEvents,
       phase2Result,
       comicImageUrl,
+      bubblePositions, // 返回气泡位置数据
       errors: errors.length > 0 ? errors : undefined,
     })
   } catch (error) {

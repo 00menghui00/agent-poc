@@ -27,8 +27,8 @@ import {
   parseTimeToSeconds, 
   createGridImage,
   uploadImageToBlob,
-  addBubblesToComic,
-  type BubbleInfo
+  addBubblesAtCoordinates,
+  type CoordinateBubble
 } from "@/lib/video-utils"
 
 export default function Home() {
@@ -269,6 +269,8 @@ export default function Home() {
     
     // 获取图像模型生成的漫画（无文字）
     const comicWithoutText = result.comicImageUrl as string
+    // 获取模型分析的气泡位置（服务端已调用视觉模型分析）
+    const bubblePositions = result.bubblePositions as CoordinateBubble[] || []
     
     // 如果用户选择不添加气泡，直接返回无气泡漫画
     if (!enableBubbles) {
@@ -277,32 +279,22 @@ export default function Home() {
       return comicWithoutText
     }
     
-    toast.info('漫画生成完成，正在添加气泡文字...')
-    
-    // 从阶段二结果中提取气泡信息
-    const bubbles: BubbleInfo[] = p2Result.comic_panels.slice(0, 9).map((panel) => ({
-      panel_id: panel.panel_id,
-      text: panel.bubble_text || '',
-      position: (panel.bubble_position || 'top-right') as BubbleInfo['position']
-    }))
-    
-    // 检查是否有气泡文字
-    const hasBubbleText = bubbles.some(b => b.text && b.text.length > 0)
-    
-    if (!hasBubbleText) {
-      // 如果模型没有返回气泡文字，直接返回无气泡漫画
+    // 检查是否有气泡数据
+    if (!bubblePositions || bubblePositions.length === 0) {
       setComicImageUrl(comicWithoutText)
-      toast.success('漫画已生成（模型未生成气泡文字）')
+      toast.success('漫画已生成（无气泡位置数据）')
       return comicWithoutText
     }
     
-    // 使用 Canvas 在漫画上添加中文气泡
+    toast.info('正在添加气泡文字...')
+    
+    // 使用 Canvas 根据坐标添加气泡
     try {
-      const comicWithBubbles = await addBubblesToComic(comicWithoutText, bubbles)
+      const comicWithBubbles = await addBubblesAtCoordinates(comicWithoutText, bubblePositions)
       // 上传带气泡的漫画
       const finalComicUrl = await uploadImageToBlob(comicWithBubbles, `comic_final_${Date.now()}.jpg`)
       setComicImageUrl(finalComicUrl)
-      toast.success('漫画已生成，包含对话气泡')
+      toast.success(`漫画已生成，包含 ${bubblePositions.length} 个对话气泡`)
       return finalComicUrl
     } catch (bubbleError) {
       console.error('添加气泡失败:', bubbleError)
@@ -429,7 +421,7 @@ export default function Home() {
     try {
       await runPhase3(phase2Result, gridImageUrl)
     } catch (error) {
-      console.error('阶段三失��:', error)
+      console.error('阶段三失���:', error)
       toast.error(error instanceof Error ? error.message : '阶段三失败')
     } finally {
       setIsProcessing(false)
