@@ -56,7 +56,7 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
             API 配置
           </DialogTitle>
           <DialogDescription>
-            配置阶跃星辰和豆包 API 连接参数
+            配置 API 连接参数
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 pt-2">
@@ -118,14 +118,14 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
               id="imageModel"
               value={localConfig.imageModel}
               onChange={(e) => setLocalConfig({ ...localConfig, imageModel: e.target.value })}
-              placeholder="doubao-seedream-5-0-260128"
+              placeholder="图像生成模型名称"
             />
-            <p className="text-xs text-muted-foreground">用于生成漫画风格九宫格图片（豆包 seedream）</p>
+            <p className="text-xs text-muted-foreground">用于生成漫画风格九宫格图片</p>
           </div>
         </div>
 
         <div className="border-t pt-4 mt-4">
-          <h4 className="text-sm font-medium mb-3">图像生成 API 配置（豆包）</h4>
+          <h4 className="text-sm font-medium mb-3">图像生成 API 配置</h4>
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="imageApiKey">图像 API Key</Label>
@@ -135,11 +135,11 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
                   type={showApiKey ? "text" : "password"}
                   value={localConfig.imageApiKey || ''}
                   onChange={(e) => setLocalConfig({ ...localConfig, imageApiKey: e.target.value })}
-                  placeholder="请输入豆包 API Key"
+                  placeholder="请输入图像 API Key"
                   className="pr-10"
                 />
               </div>
-              <p className="text-xs text-muted-foreground">如果图像API使用不同的Key，请在此配置</p>
+              <p className="text-xs text-muted-foreground">如果图像 API 使用不同的 Key，请在此配置</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="imageBaseUrl">图像 API Base URL</Label>
@@ -147,9 +147,9 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
                 id="imageBaseUrl"
                 value={localConfig.imageBaseUrl || ''}
                 onChange={(e) => setLocalConfig({ ...localConfig, imageBaseUrl: e.target.value })}
-                placeholder="https://ark.cn-beijing.volces.com/api/v3"
+                placeholder="图像 API 地址"
               />
-              <p className="text-xs text-muted-foreground">豆包 API 地址</p>
+              <p className="text-xs text-muted-foreground">图像生成 API 地址</p>
             </div>
           </div>
         </div>
