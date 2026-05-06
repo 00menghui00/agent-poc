@@ -231,29 +231,6 @@ export function createGridImage(
           ctx.strokeRect(x, y, cellSize, cellSize)
         })
 
-        // 添加格子编号
-        ctx.font = 'bold 24px Arial'
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)'
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'middle'
-        
-        for (let i = 0; i < 9; i++) {
-          const row = Math.floor(i / 3)
-          const col = i % 3
-          const x = col * cellSize + 30
-          const y = row * cellSize + 30
-          
-          // 绘制圆形背景
-          ctx.beginPath()
-          ctx.arc(x, y, 18, 0, Math.PI * 2)
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
-          ctx.fill()
-          
-          // 绘制数字
-          ctx.fillStyle = '#ffffff'
-          ctx.fillText((i + 1).toString(), x, y)
-        }
-
         const dataUrl = canvas.toDataURL('image/jpeg', 0.9)
         resolve(dataUrl)
       })
