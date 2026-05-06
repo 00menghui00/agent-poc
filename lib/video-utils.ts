@@ -151,18 +151,51 @@ export function downloadDataUrl(dataUrl: string, filename: string) {
 }
 
 /**
- * 将多张图片拼接成九宫格
- * @param imageUrls 图片 URL 或 base64 数组（最多9张，不足9张会重复使用）
- * @param cellSize 每个格子的尺寸
- * @returns Promise<string> 九宫格图片的 base64
+ * 不规则拼接布局定义
+ * 每个区块: { x, y, w, h } 表示在画布上的位置和尺寸（基于单位格子）
+ */
+const IRREGULAR_LAYOUTS = [
+  // 布局1: 左上大图 + 右侧小图 + 底部横条
+  [
+    { x: 0, y: 0, w: 2, h: 2 },     // 0: 左上大图
+    { x: 2, y: 0, w: 1, h: 1 },     // 1: 右上小图
+    { x: 2, y: 1, w: 1, h: 1 },     // 2: 右中小图
+    { x: 0, y: 2, w: 1, h: 1 },     // 3: 左下小图
+    { x: 1, y: 2, w: 1, h: 1 },     // 4: 中下小图
+    { x: 2, y: 2, w: 1, h: 1 },     // 5: 右下小图
+  ],
+  // 布局2: 顶部横条 + 中间交错 + 右下大图
+  [
+    { x: 0, y: 0, w: 1, h: 1 },     // 0: 左上
+    { x: 1, y: 0, w: 1, h: 1 },     // 1: 中上
+    { x: 2, y: 0, w: 1, h: 2 },     // 2: 右侧竖图
+    { x: 0, y: 1, w: 2, h: 1 },     // 3: 左中横图
+    { x: 0, y: 2, w: 1, h: 1 },     // 4: 左下
+    { x: 1, y: 2, w: 2, h: 1 },     // 5: 右下横图
+  ],
+  // 布局3: 中心大图 + 四周小图
+  [
+    { x: 0, y: 0, w: 1, h: 1 },     // 0: 左上
+    { x: 1, y: 0, w: 1, h: 1 },     // 1: 中上
+    { x: 2, y: 0, w: 1, h: 1 },     // 2: 右上
+    { x: 0, y: 1, w: 1, h: 2 },     // 3: 左侧竖图
+    { x: 1, y: 1, w: 2, h: 2 },     // 4: 右下大图
+  ],
+]
+
+/**
+ * 将多张图片拼接成不规则布局的拼图
+ * @param imageUrls 图片 URL 或 base64 数组
+ * @param unitSize 单位格子的尺寸
+ * @returns Promise<string> 拼图图片的 base64
  */
 export function createGridImage(
   imageUrls: string[],
-  cellSize: number = 340
+  unitSize: number = 340
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     if (typeof window === 'undefined' || typeof document === 'undefined') {
-      reject(new Error('只能在浏览器环境中创建九宫格'))
+      reject(new Error('只能在浏览器环境中创建拼图'))
       return
     }
 
@@ -171,10 +204,10 @@ export function createGridImage(
       return
     }
 
-    const gridSize = cellSize * 3
+    const canvasSize = unitSize * 3
     const canvas = document.createElement('canvas')
-    canvas.width = gridSize
-    canvas.height = gridSize
+    canvas.width = canvasSize
+    canvas.height = canvasSize
     const ctx = canvas.getContext('2d')
 
     if (!ctx) {
@@ -183,8 +216,12 @@ export function createGridImage(
     }
 
     // 填充背景
-    ctx.fillStyle = '#f5f5f5'
-    ctx.fillRect(0, 0, gridSize, gridSize)
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, canvasSize, canvasSize)
+
+    // 根据图片数量选择合适的布局
+    const layoutIndex = imageUrls.length <= 5 ? 2 : (imageUrls.length <= 6 ? 0 : 1)
+    const layout = IRREGULAR_LAYOUTS[layoutIndex]
 
     // 加载所有图片
     const loadImage = (url: string): Promise<HTMLImageElement> => {
@@ -197,41 +234,52 @@ export function createGridImage(
       })
     }
 
-    // 确保有9张图片（不足则循环使用）
+    // 确保有足够的图片（不足则循环使用）
     const urls: string[] = []
-    for (let i = 0; i < 9; i++) {
+    for (let i = 0; i < layout.length; i++) {
       urls.push(imageUrls[i % imageUrls.length])
     }
 
     Promise.all(urls.map(loadImage))
       .then(images => {
-        images.forEach((img, index) => {
-          const row = Math.floor(index / 3)
-          const col = index % 3
-          const x = col * cellSize
-          const y = row * cellSize
+        const gap = 4 // 图片间隙
 
-          // 计算裁剪以保持比例
-          const scale = Math.max(cellSize / img.width, cellSize / img.height)
+        images.forEach((img, index) => {
+          const cell = layout[index]
+          const x = cell.x * unitSize + gap / 2
+          const y = cell.y * unitSize + gap / 2
+          const w = cell.w * unitSize - gap
+          const h = cell.h * unitSize - gap
+
+          // 计算裁剪以保持比例并居中
+          const scale = Math.max(w / img.width, h / img.height)
           const scaledWidth = img.width * scale
           const scaledHeight = img.height * scale
-          const offsetX = (scaledWidth - cellSize) / 2
-          const offsetY = (scaledHeight - cellSize) / 2
+          const offsetX = (scaledWidth - w) / 2
+          const offsetY = (scaledHeight - h) / 2
 
           ctx.save()
+          
+          // 绘制圆角矩形裁剪区域
+          const radius = 8
           ctx.beginPath()
-          ctx.rect(x, y, cellSize, cellSize)
+          ctx.moveTo(x + radius, y)
+          ctx.lineTo(x + w - radius, y)
+          ctx.quadraticCurveTo(x + w, y, x + w, y + radius)
+          ctx.lineTo(x + w, y + h - radius)
+          ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h)
+          ctx.lineTo(x + radius, y + h)
+          ctx.quadraticCurveTo(x, y + h, x, y + h - radius)
+          ctx.lineTo(x, y + radius)
+          ctx.quadraticCurveTo(x, y, x + radius, y)
+          ctx.closePath()
           ctx.clip()
+
           ctx.drawImage(img, x - offsetX, y - offsetY, scaledWidth, scaledHeight)
           ctx.restore()
-
-          // 添加格子边框
-          ctx.strokeStyle = '#ffffff'
-          ctx.lineWidth = 2
-          ctx.strokeRect(x, y, cellSize, cellSize)
         })
 
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.9)
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.92)
         resolve(dataUrl)
       })
       .catch(reject)
