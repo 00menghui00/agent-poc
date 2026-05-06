@@ -1,8 +1,10 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { Play, BookOpen, Sparkles, Image as ImageIcon, Loader2 } from "lucide-react"
+import { Play, BookOpen, Sparkles, Image as ImageIcon, Loader2, MessageCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Toaster } from "@/components/ui/sonner"
 import { toast } from "sonner"
@@ -50,6 +52,9 @@ export default function Home() {
   
   // 阶段三结果
   const [comicImageUrl, setComicImageUrl] = useState<string | null>(null)
+  
+  // 气泡选项
+  const [enableBubbles, setEnableBubbles] = useState(true)
 
   // 从 localStorage 加载配置
   useEffect(() => {
@@ -264,6 +269,14 @@ export default function Home() {
     
     // 获取图像模型生成的漫画（无文字）
     const comicWithoutText = result.comicImageUrl as string
+    
+    // 如果用户选择不添加气泡，直接返回无气泡漫画
+    if (!enableBubbles) {
+      setComicImageUrl(comicWithoutText)
+      toast.success('漫画已生成（无气泡）')
+      return comicWithoutText
+    }
+    
     toast.info('漫画生成完成，正在添加气泡文字...')
     
     // 从阶段二结果中提取气泡信息
@@ -273,11 +286,15 @@ export default function Home() {
       position: (panel.bubble_position || 'top-right') as BubbleInfo['position']
     }))
     
-    // 调试：检查气泡数据
-    console.log('[v0] 阶段二分镜数据:', p2Result.comic_panels)
-    console.log('[v0] 提取的气泡信息:', bubbles)
+    // 检查是否有气泡文字
     const hasBubbleText = bubbles.some(b => b.text && b.text.length > 0)
-    console.log('[v0] 是否有气泡文字:', hasBubbleText)
+    
+    if (!hasBubbleText) {
+      // 如果模型没有返回气泡文字，直接返回无气泡漫画
+      setComicImageUrl(comicWithoutText)
+      toast.success('漫画已生成（模型未生成气泡文字）')
+      return comicWithoutText
+    }
     
     // 使用 Canvas 在漫画上添加中文气泡
     try {
@@ -437,7 +454,20 @@ export default function Home() {
                 <p className="text-sm text-muted-foreground">视频 → 事件 → 日记 → 漫画</p>
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-4">
+              {/* 气泡开关 */}
+              <div className="flex items-center gap-2 px-3 py-2 bg-secondary/50 rounded-lg">
+                <MessageCircle className="h-4 w-4 text-muted-foreground" />
+                <Label htmlFor="bubble-switch" className="text-sm cursor-pointer">
+                  添加气泡
+                </Label>
+                <Switch
+                  id="bubble-switch"
+                  checked={enableBubbles}
+                  onCheckedChange={setEnableBubbles}
+                />
+              </div>
+              
               <Button 
                 onClick={handleProcess} 
                 disabled={isProcessing || videos.length === 0}
