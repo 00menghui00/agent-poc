@@ -273,20 +273,34 @@ export interface BubbleInfo {
  * @param bubbles 气泡信息数组（9个，对应九宫格）
  * @returns Promise<string> 添加气泡后的图片 base64
  */
-export function addBubblesToComic(
+export async function addBubblesToComic(
   imageUrl: string,
   bubbles: BubbleInfo[]
 ): Promise<string> {
-  return new Promise((resolve, reject) => {
-    if (typeof window === 'undefined' || typeof document === 'undefined') {
-      reject(new Error('只能在浏览器环境中添加气泡'))
-      return
-    }
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    throw new Error('只能在浏览器环境中添加气泡')
+  }
 
+  // 通过 fetch 下载图片绕过跨域限制
+  let blobUrl: string
+  try {
+    const response = await fetch(imageUrl)
+    if (!response.ok) {
+      throw new Error(`下载图片失败: ${response.status}`)
+    }
+    const blob = await response.blob()
+    blobUrl = URL.createObjectURL(blob)
+  } catch (fetchError) {
+    console.error('[v0] 下载漫画图片失败:', fetchError)
+    throw new Error(`下载漫画图片失败: ${fetchError instanceof Error ? fetchError.message : '未知错误'}`)
+  }
+
+  return new Promise((resolve, reject) => {
     const img = new Image()
-    img.crossOrigin = 'anonymous'
     
     img.onload = () => {
+      // 释放 blob URL
+      URL.revokeObjectURL(blobUrl)
       const canvas = document.createElement('canvas')
       canvas.width = img.width
       canvas.height = img.height
@@ -455,10 +469,11 @@ export function addBubblesToComic(
     }
     
     img.onerror = () => {
+      URL.revokeObjectURL(blobUrl)
       reject(new Error('无法加载漫画图片'))
     }
     
-    img.src = imageUrl
+    img.src = blobUrl
   })
 }
 
