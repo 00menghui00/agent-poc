@@ -259,6 +259,210 @@ export function createGridImage(
 }
 
 /**
+ * 气泡文字信息
+ */
+export interface BubbleInfo {
+  panel_id: number
+  text: string
+  position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center'
+}
+
+/**
+ * 在漫画图片上添加中文气泡文字
+ * @param imageUrl 漫画图片 URL
+ * @param bubbles 气泡信息数组（9个，对应九宫格）
+ * @returns Promise<string> 添加气泡后的图片 base64
+ */
+export function addBubblesToComic(
+  imageUrl: string,
+  bubbles: BubbleInfo[]
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      reject(new Error('只能在浏览器环境中添加气泡'))
+      return
+    }
+
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = img.width
+      canvas.height = img.height
+      const ctx = canvas.getContext('2d')
+      
+      if (!ctx) {
+        reject(new Error('无法创建 canvas context'))
+        return
+      }
+      
+      // 绘制原图
+      ctx.drawImage(img, 0, 0)
+      
+      // 计算九宫格布局（与 createGridImage 保持一致）
+      // 使用6x8网格
+      const gridUnits = 6
+      const unitWidth = img.width / gridUnits
+      const unitHeight = img.height / 8
+      
+      const layout9 = [
+        { x: 0, y: 0, w: 4, h: 4 },     // 0: 左上大图
+        { x: 4, y: 0, w: 2, h: 2 },     // 1: 右上小图
+        { x: 4, y: 2, w: 2, h: 2 },     // 2: 右中小图
+        { x: 0, y: 4, w: 2, h: 2 },     // 3: 左下小图
+        { x: 2, y: 4, w: 2, h: 2 },     // 4: 中下小图
+        { x: 4, y: 4, w: 2, h: 2 },     // 5: 右下小图
+        { x: 0, y: 6, w: 2, h: 2 },     // 6: 底左小图
+        { x: 2, y: 6, w: 2, h: 2 },     // 7: 底中小图
+        { x: 4, y: 6, w: 2, h: 2 },     // 8: 底右小图
+      ]
+      
+      // 为每个分镜添加气泡
+      bubbles.forEach((bubble) => {
+        const panelIndex = bubble.panel_id - 1
+        if (panelIndex < 0 || panelIndex >= 9 || !bubble.text) return
+        
+        const cell = layout9[panelIndex]
+        const cellX = cell.x * unitWidth
+        const cellY = cell.y * unitHeight
+        const cellW = cell.w * unitWidth
+        const cellH = cell.h * unitHeight
+        
+        // 根据位置计算气泡坐标
+        const padding = 10
+        const bubbleMaxWidth = Math.min(cellW * 0.8, 200)
+        
+        // 计算文字尺寸
+        const fontSize = Math.max(12, Math.min(16, cellW / 15))
+        ctx.font = `${fontSize}px "PingFang SC", "Microsoft YaHei", sans-serif`
+        
+        // 文字自动换行
+        const words = bubble.text.split('')
+        const lines: string[] = []
+        let currentLine = ''
+        
+        for (const char of words) {
+          const testLine = currentLine + char
+          const metrics = ctx.measureText(testLine)
+          if (metrics.width > bubbleMaxWidth - 20) {
+            lines.push(currentLine)
+            currentLine = char
+          } else {
+            currentLine = testLine
+          }
+        }
+        if (currentLine) lines.push(currentLine)
+        
+        const lineHeight = fontSize * 1.4
+        const textHeight = lines.length * lineHeight
+        const textWidth = Math.max(...lines.map(l => ctx.measureText(l).width))
+        
+        // 气泡尺寸
+        const bubbleWidth = textWidth + 24
+        const bubbleHeight = textHeight + 16
+        
+        // 根据位置计算气泡坐标
+        let bubbleX: number, bubbleY: number
+        switch (bubble.position) {
+          case 'top-left':
+            bubbleX = cellX + padding
+            bubbleY = cellY + padding
+            break
+          case 'top-right':
+            bubbleX = cellX + cellW - bubbleWidth - padding
+            bubbleY = cellY + padding
+            break
+          case 'bottom-left':
+            bubbleX = cellX + padding
+            bubbleY = cellY + cellH - bubbleHeight - padding
+            break
+          case 'bottom-right':
+            bubbleX = cellX + cellW - bubbleWidth - padding
+            bubbleY = cellY + cellH - bubbleHeight - padding
+            break
+          case 'center':
+          default:
+            bubbleX = cellX + (cellW - bubbleWidth) / 2
+            bubbleY = cellY + (cellH - bubbleHeight) / 2
+            break
+        }
+        
+        // 绘制气泡背景（带尾巴的椭圆形）
+        ctx.save()
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
+        ctx.strokeStyle = '#333333'
+        ctx.lineWidth = 2
+        
+        // 绘制圆角矩形气泡
+        const radius = 10
+        ctx.beginPath()
+        ctx.moveTo(bubbleX + radius, bubbleY)
+        ctx.lineTo(bubbleX + bubbleWidth - radius, bubbleY)
+        ctx.quadraticCurveTo(bubbleX + bubbleWidth, bubbleY, bubbleX + bubbleWidth, bubbleY + radius)
+        ctx.lineTo(bubbleX + bubbleWidth, bubbleY + bubbleHeight - radius)
+        ctx.quadraticCurveTo(bubbleX + bubbleWidth, bubbleY + bubbleHeight, bubbleX + bubbleWidth - radius, bubbleY + bubbleHeight)
+        ctx.lineTo(bubbleX + radius, bubbleY + bubbleHeight)
+        ctx.quadraticCurveTo(bubbleX, bubbleY + bubbleHeight, bubbleX, bubbleY + bubbleHeight - radius)
+        ctx.lineTo(bubbleX, bubbleY + radius)
+        ctx.quadraticCurveTo(bubbleX, bubbleY, bubbleX + radius, bubbleY)
+        ctx.closePath()
+        ctx.fill()
+        ctx.stroke()
+        
+        // 绘制气泡尾巴
+        const tailSize = 8
+        let tailX: number, tailY: number, tailDir: 'down' | 'up' | 'left' | 'right'
+        
+        if (bubble.position === 'top-left' || bubble.position === 'top-right') {
+          tailX = bubbleX + bubbleWidth / 2
+          tailY = bubbleY + bubbleHeight
+          tailDir = 'down'
+        } else {
+          tailX = bubbleX + bubbleWidth / 2
+          tailY = bubbleY
+          tailDir = 'up'
+        }
+        
+        ctx.beginPath()
+        if (tailDir === 'down') {
+          ctx.moveTo(tailX - tailSize, tailY - 2)
+          ctx.lineTo(tailX, tailY + tailSize)
+          ctx.lineTo(tailX + tailSize, tailY - 2)
+        } else {
+          ctx.moveTo(tailX - tailSize, tailY + 2)
+          ctx.lineTo(tailX, tailY - tailSize)
+          ctx.lineTo(tailX + tailSize, tailY + 2)
+        }
+        ctx.closePath()
+        ctx.fill()
+        ctx.stroke()
+        
+        ctx.restore()
+        
+        // 绘制文字
+        ctx.fillStyle = '#333333'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'top'
+        
+        lines.forEach((line, i) => {
+          ctx.fillText(line, bubbleX + bubbleWidth / 2, bubbleY + 8 + i * lineHeight)
+        })
+      })
+      
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.92)
+      resolve(dataUrl)
+    }
+    
+    img.onerror = () => {
+      reject(new Error('无法加载漫画图片'))
+    }
+    
+    img.src = imageUrl
+  })
+}
+
+/**
  * 将 base64 dataUrl 转换为 Blob（带正确的 MIME 类型）
  */
 function dataUrlToBlob(dataUrl: string): Blob {

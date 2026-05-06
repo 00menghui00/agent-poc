@@ -24,7 +24,9 @@ import {
   extractFrameFromVideo, 
   parseTimeToSeconds, 
   createGridImage,
-  uploadImageToBlob 
+  uploadImageToBlob,
+  addBubblesToComic,
+  type BubbleInfo
 } from "@/lib/video-utils"
 
 export default function Home() {
@@ -260,9 +262,32 @@ export default function Home() {
     const result = await response.json()
     if (!response.ok) throw new Error(result.error || '阶段三失败')
     
-    setComicImageUrl(result.comicImageUrl)
-    toast.success('阶段三完成，漫画已生成')
-    return result.comicImageUrl as string
+    // 获取图像模型生成的漫画（无文字）
+    const comicWithoutText = result.comicImageUrl as string
+    toast.info('漫画生成完成，正在添加气泡文字...')
+    
+    // 从阶段二结果中提取气泡信息
+    const bubbles: BubbleInfo[] = p2Result.comic_panels.slice(0, 9).map((panel) => ({
+      panel_id: panel.panel_id,
+      text: panel.bubble_text || '',
+      position: (panel.bubble_position || 'top-right') as BubbleInfo['position']
+    }))
+    
+    // 使用 Canvas 在漫画上添加中文气泡
+    try {
+      const comicWithBubbles = await addBubblesToComic(comicWithoutText, bubbles)
+      // 上传带气泡的漫画
+      const finalComicUrl = await uploadImageToBlob(comicWithBubbles, `comic_final_${Date.now()}.jpg`)
+      setComicImageUrl(finalComicUrl)
+      toast.success('漫画已生成，包含对话气泡')
+      return finalComicUrl
+    } catch (bubbleError) {
+      console.error('添加气泡失败:', bubbleError)
+      // 如果添加气泡失败，仍然返回无气泡的漫画
+      setComicImageUrl(comicWithoutText)
+      toast.warning('气泡添加失败，返回无气泡漫画')
+      return comicWithoutText
+    }
   }
 
   // 完整处理流程

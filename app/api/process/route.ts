@@ -20,6 +20,8 @@ interface EventUnit {
 interface ComicPanel {
   panel_id: number
   prompt: string
+  bubble_text?: string // 气泡文字内容
+  bubble_position?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center'
   highlight_frame_id?: string
 }
 
@@ -191,14 +193,18 @@ ${eventsText}
 
 请根据这些事件和图片：
 1. 生成一篇流畅自然的日记（150-300字），请严格按照事件的时间顺序来叙述
-2. 生成9个分镜 prompt，每个分镜的 prompt 应包含：场景描述、人物动作、表情、对话内容建议
+2. 生成9个分镜，每个分镜必须包含：
+   - prompt: 场景描述、人物动作、表情
+   - bubble_text: 对话气泡文字（中文，10-20字，表达人物对话或内心独白）
+   - bubble_position: 气泡位置（top-left/top-right/bottom-left/bottom-right/center）
 
 请严格按照 JSON 格式输出：
 {
   "diary_text": "日记内容...",
   "comic_panels": [
-    {"panel_id": 1, "prompt": "分镜1描述，包含场景、人物、对话建议..."},
-    ...
+    {"panel_id": 1, "prompt": "场景描述...", "bubble_text": "气泡文字内容", "bubble_position": "top-right"},
+    {"panel_id": 2, "prompt": "场景描述...", "bubble_text": "气泡文字内容", "bubble_position": "top-left"},
+    ...共9个分镜
   ]
 }`
 
@@ -278,6 +284,7 @@ ${eventsText}
 }
 
 // 阶段三：生成漫画九宫格（使用豆包 seedream API，JSON 格式）
+// 注意：只生成漫画风格图片，不添加文字，文字由前端 Canvas 添加
 async function processPhase3(
   apiKey: string,
   baseUrl: string,
@@ -288,16 +295,8 @@ async function processPhase3(
   gridImageUrl: string
 ): Promise<string> {
   
-  // 构建分镜描述（精简版，每个分镜用关键词）
-  const panelKeywords = comicPanels.slice(0, 9).map(p => {
-    // 提取每个分镜的关键词（限制20字符）
-    const keywords = p.prompt.substring(0, 20)
-    return `${p.panel_id}:${keywords}`
-  }).join(',')
-  
-  // 构建 prompt
-  // 包含：漫画风格指令 + 分镜关键词 + 要求添加文字气泡
-  const editPrompt = `将这张九宫格照片转换为日系漫画风格,添加对话气泡和拟声词,保持人物特征和构图。分镜内容:${panelKeywords}`
+  // 构建 prompt - 只做漫画风格转换，不添加文字
+  const editPrompt = `将这张九宫格照片转换为日系漫画风格,保持原有构图和人物特征,不要添加任何文字或对话气泡`
 
   // 使用豆包 seedream API（JSON 格式），带超时控制
   const controller = new AbortController()

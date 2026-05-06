@@ -39,6 +39,8 @@ export interface EventUnit {
 export interface ComicPanel {
   panel_id: number
   prompt: string
+  bubble_text?: string // 气泡文字内容（用于前端 Canvas 渲染）
+  bubble_position?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center' // 气泡位置
   highlight_frame_id?: string
 }
 
@@ -115,32 +117,34 @@ export const DEFAULT_PHASE2_PROMPT = `你是一个"生活日记与漫画分镜�
    * 第9格 (总结): 对一天的总结
 2. **Prompt 内容:** 每个分镜 prompt 必须包含：场景描述、人物动作与表情、情绪氛围、风格关键词（如"卡通风格"、"日系漫画"）
 3. **人物一致性:** 同一角色在所有分镜中保持外观一致
+4. **气泡文字:** 每个分镜必须包含 bubble_text 字段，内容为该格子中人物的对话或内心独白（中文，10-20字）
+5. **气泡位置:** 每个分镜必须包含 bubble_position 字段，指定气泡位置（top-left/top-right/bottom-left/bottom-right/center）
 
 **输出格式:** JSON 格式，包含 diary_text 和 comic_panels 字段：
 \`\`\`json
 {
   "diary_text": "今天阳光明媚，我在办公室里处理着手头的工作...",
   "comic_panels": [
-    {"panel_id": 1, "prompt": "卡通风格，办公室窗外阳光明媚..."},
-    {"panel_id": 2, "prompt": "日系漫画风格，年轻人专注地敲击键盘..."},
+    {"panel_id": 1, "prompt": "卡通风格，办公室窗外阳光明媚...", "bubble_text": "新的一天开始了！", "bubble_position": "top-right"},
+    {"panel_id": 2, "prompt": "日系漫画风格，年轻人专注地敲击键盘...", "bubble_text": "今天要把这个项目搞定", "bubble_position": "top-left"},
     ...
   ]
 }
 \`\`\``
 
-export const DEFAULT_PHASE3_PROMPT = `你是一个专业漫画生成模型。你的任务是根据用户提供的日记文本、九宫格分镜 prompt 列表和参考图片，生成一张完整的"九宫格漫画图片"。
+export const DEFAULT_PHASE3_PROMPT = `你是一个专业漫画生成模型。你的任务是根据用户提供的参考图片，生成一张完整的"九宫格漫画风格图片"。
 
 **整体要求:**
-1. **完整九宫格:** 最终输出必须是一张完整的九宫格漫画图片（3x3 布局）。
-2. **严格遵循分镜 Prompt:** 必须严格按照每个分镜 prompt 中提供的场景描述、人物动作表情、情绪氛围、风格关键词来生成对应的画面。
-3. **统一风格:** 所有漫画画面必须保持统一的风格，例如卡通、日系或轻松生活风。
-4. **人物外观一致性:** 同一角色在不同的格子中必须保持外观一致。
-5. **清晰表达事件:** 每格画面都需清晰地表达事件的进展和内容。
+1. **完整九宫格:** 保持原图的九宫格布局结构。
+2. **统一漫画风格:** 将照片转换为统一的日系漫画/卡通风格，线条清晰、色彩鲜明。
+3. **人物外观一致性:** 同一角色在不同的格子中必须保持外观一致。
+4. **保持构图:** 保持原图的构图和人物位置不变。
+5. **不添加文字:** 不要在图片上添加任何文字、气泡或对话框，文字将由后续程序添加。
 
 **重要约束:**
-* 最终输出必须且只能是漫画图片文件
-* 无额外文本说明
-* 高光帧应用：优先使用分镜 prompt 中指定的高光帧作为参考`
+* 最终输出必须且只能是漫画风格图片
+* 不要添加任何文字、对话气泡、拟声词
+* 保持原图的布局和人物特征`
 
 export const DEFAULT_API_CONFIG: APIConfig = {
   apiKey: '',
