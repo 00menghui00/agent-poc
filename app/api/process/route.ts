@@ -169,7 +169,7 @@ async function processPhase2(
   highlightFrameUrls: string[]
 ): Promise<Phase2Result> {
   
-  // 构建事件列表文本
+  // 构建事件列表文本（按时间顺序，确保日记时间线正确）
   const eventsText = events.map((e, i) => 
     `事件${i + 1}:
 - 时间: ${e.time}
@@ -181,24 +181,31 @@ async function processPhase2(
 - 标签: ${e.tags?.join(', ') || ''}`
   ).join('\n\n')
 
-  const userMessage = `以下是今天发生的事件列表：
+  const userMessage = `以下是今天发生的事件列表（已按时间顺序排列）：
 
 ${eventsText}
 
-同时附上了对应的高光帧图片作为参考。
+同时附上了对应的高光帧图片作为参考（图片顺序与事件顺序一致）。
 
 请根据这些事件和图片：
-1. 生成一篇流畅自然的日记（150-300字）
-2. 生成9个分镜 prompt，用于后续漫画生成
+1. 生成一篇流畅自然的日记（150-300字），请严格按照事件的时间顺序来叙述
+2. 生成9个分镜 prompt，每个分镜的 prompt 应包含：场景描述、人物动作、表情、对话内容建议
 
-请严格按照 JSON 格式输出。`
+请严格按照 JSON 格式输出：
+{
+  "diary_text": "日记内容...",
+  "comic_panels": [
+    {"panel_id": 1, "prompt": "分镜1描述，包含场景、人物、对话建议..."},
+    ...
+  ]
+}`
 
   // 构建消息内容，包含文本和图片
   const contentParts: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
     { type: 'text', text: userMessage }
   ]
   
-  // 添加高光帧图片
+  // 添加高光帧图片（按时间顺序）
   for (const frameUrl of highlightFrameUrls) {
     if (frameUrl) {
       contentParts.push({
@@ -208,21 +215,37 @@ ${eventsText}
     }
   }
 
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: contentParts },
-      ],
-      max_tokens: 8000,
-    }),
-  })
+  // 添加超时控制
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 180000) // 3分钟超时
+  
+  let response: Response
+  try {
+    response = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: contentParts },
+        ],
+        max_tokens: 8000,
+      }),
+      signal: controller.signal,
+    })
+  } catch (fetchError) {
+    clearTimeout(timeoutId)
+    if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+      throw new Error('阶段二处理超时，请稍后重试')
+    }
+    throw new Error(`阶段二网络错误: ${fetchError instanceof Error ? fetchError.message : '未知错误'}`)
+  }
+  
+  clearTimeout(timeoutId)
 
   if (!response.ok) {
     const error = await response.text()
@@ -278,12 +301,25 @@ async function processPhase3(
   // 确保 prompt 不超过 512 字符
   const finalPrompt = editPrompt.length > 500 ? editPrompt.substring(0, 500) : editPrompt
 
-  // 先下载九宫格图片
-  const imageResponse = await fetch(gridImageUrl)
-  if (!imageResponse.ok) {
-    throw new Error(`无法下载九宫格图片: ${gridImageUrl}`)
+  // 先下载九宫格图片（带超时）
+  const downloadController = new AbortController()
+  const downloadTimeout = setTimeout(() => downloadController.abort(), 30000) // 30秒超时
+  
+  let imageBlob: Blob
+  try {
+    const imageResponse = await fetch(gridImageUrl, { signal: downloadController.signal })
+    clearTimeout(downloadTimeout)
+    if (!imageResponse.ok) {
+      throw new Error(`无法下载九宫格图片: ${gridImageUrl}`)
+    }
+    imageBlob = await imageResponse.blob()
+  } catch (downloadError) {
+    clearTimeout(downloadTimeout)
+    if (downloadError instanceof Error && downloadError.name === 'AbortError') {
+      throw new Error('下载九宫格图片超时')
+    }
+    throw new Error(`下载九宫格图片失败: ${downloadError instanceof Error ? downloadError.message : '未知错误'}`)
   }
-  const imageBlob = await imageResponse.blob()
   
   // 构建 multipart/form-data 请求
   const formData = new FormData()
@@ -294,15 +330,29 @@ async function processPhase3(
   formData.append('cfg_scale', '3.0')
   formData.append('steps', '20')
 
-  // 使用图像编辑 API（阶跃星辰的 step-image-edit）
-  const response = await fetch(`${baseUrl}/images/edits`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      // 不设置 Content-Type，让浏览器自动设置 multipart/form-data 边界
-    },
-    body: formData,
-  })
+  // 使用图像编辑 API（阶跃星辰的 step-image-edit），带超时控制
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 120000) // 2分钟超时
+  
+  let response: Response
+  try {
+    response = await fetch(`${baseUrl}/images/edits`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: formData,
+      signal: controller.signal,
+    })
+  } catch (fetchError) {
+    clearTimeout(timeoutId)
+    if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+      throw new Error('阶段三图片生成超时，请稍后重试')
+    }
+    throw new Error(`阶段三网络错误: ${fetchError instanceof Error ? fetchError.message : '未知错误'}`)
+  }
+  
+  clearTimeout(timeoutId)
 
   if (!response.ok) {
     const error = await response.text()
@@ -370,7 +420,7 @@ export async function POST(request: NextRequest) {
         let success = false
         let lastError = ''
         
-        // 重试机制：最多尝试2次
+        // 重��机制：最多尝试2次
         for (let attempt = 0; attempt < 2 && !success; attempt++) {
           try {
             if (attempt > 0) {
