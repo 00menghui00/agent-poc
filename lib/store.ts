@@ -5,7 +5,9 @@ export interface APIConfig {
   baseUrl: string
   visionModel: string
   reasoningModel: string
-  imageModel: string // 新增：图像编辑模型
+  imageModel: string // 图像生成模型
+  imageApiKey?: string // 图像API单独的Key（如果不同）
+  imageBaseUrl?: string // 图像API单独的地址（如果不同）
 }
 
 export interface VideoFile {
@@ -145,5 +147,7 @@ export const DEFAULT_API_CONFIG: APIConfig = {
   baseUrl: 'https://api.stepfun.com/v1',
   visionModel: 'step-1o-turbo-vision',
   reasoningModel: 'step-3',
-  imageModel: 'step-image-edit-2', // 图像编辑模型
+  imageModel: 'doubao-seedream-5-0-260128', // 豆包 seedream 图像生成模型
+  imageApiKey: '', // 豆包 API Key（需要单独配置）
+  imageBaseUrl: 'https://ark.cn-beijing.volces.com/api/v3', // 豆包 API 地址
 }

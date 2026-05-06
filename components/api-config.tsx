@@ -103,9 +103,39 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
               id="imageModel"
               value={localConfig.imageModel}
               onChange={(e) => setLocalConfig({ ...localConfig, imageModel: e.target.value })}
-              placeholder="step-1x-medium"
+              placeholder="doubao-seedream-5-0-260128"
             />
-            <p className="text-xs text-muted-foreground">用于生成漫画风格九宫格图片</p>
+            <p className="text-xs text-muted-foreground">用于生成漫画风格九宫格图片（豆包 seedream）</p>
+          </div>
+        </div>
+
+        <div className="border-t pt-4 mt-4">
+          <h4 className="text-sm font-medium mb-3">图像生成 API 配置（豆包）</h4>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="imageApiKey">图像 API Key</Label>
+              <div className="relative">
+                <Input
+                  id="imageApiKey"
+                  type={showApiKey ? "text" : "password"}
+                  value={localConfig.imageApiKey || ''}
+                  onChange={(e) => setLocalConfig({ ...localConfig, imageApiKey: e.target.value })}
+                  placeholder="请输入豆包 API Key"
+                  className="pr-10"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">如果图像API使用不同的Key，请在此配置</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="imageBaseUrl">图像 API Base URL</Label>
+              <Input
+                id="imageBaseUrl"
+                value={localConfig.imageBaseUrl || ''}
+                onChange={(e) => setLocalConfig({ ...localConfig, imageBaseUrl: e.target.value })}
+                placeholder="https://ark.cn-beijing.volces.com/api/v3"
+              />
+              <p className="text-xs text-muted-foreground">豆包 API 地址</p>
+            </div>
           </div>
         </div>
 

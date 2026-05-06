@@ -41,6 +41,8 @@ interface ProcessRequest {
   visionModel: string
   reasoningModel: string
   imageModel: string
+  imageApiKey?: string // 图像API单独的Key
+  imageBaseUrl?: string // 图像API单独的地址
   phase1Prompt: string
   phase2Prompt: string
   phase3Prompt: string
@@ -275,7 +277,7 @@ ${eventsText}
   }
 }
 
-// 阶段三：生成漫画九宫格（使用图像编辑 API，multipart/form-data 格式）
+// 阶段三：生成漫画九宫格（使用豆包 seedream API，JSON 格式）
 async function processPhase3(
   apiKey: string,
   baseUrl: string,
@@ -288,60 +290,37 @@ async function processPhase3(
   
   // 构建分镜描述（精简版，每个分镜用关键词）
   const panelKeywords = comicPanels.slice(0, 9).map(p => {
-    // 提取每个分镜的关键词（限制15字符）
-    const keywords = p.prompt.substring(0, 15)
+    // 提取每个分镜的关键词（限制20字符）
+    const keywords = p.prompt.substring(0, 20)
     return `${p.panel_id}:${keywords}`
   }).join(',')
   
-  // 构建精简 prompt（限制在 500 字符以内）
-  // 阶跃星辰图像编辑 API 的 prompt 限制为 512 字符
+  // 构建 prompt
   // 包含：漫画风格指令 + 分镜关键词 + 要求添加文字气泡
-  const editPrompt = `转为日系漫画风格,添加对话气泡和拟声词,保持人物特征。分镜:${panelKeywords}`
-  
-  // 确保 prompt 不超过 512 字符
-  const finalPrompt = editPrompt.length > 500 ? editPrompt.substring(0, 500) : editPrompt
+  const editPrompt = `将这张九宫格照片转换为日系漫画风格,添加对话气泡和拟声词,保持人物特征和构图。分镜内容:${panelKeywords}`
 
-  // 先下载九宫格图片（带超时）
-  const downloadController = new AbortController()
-  const downloadTimeout = setTimeout(() => downloadController.abort(), 30000) // 30秒超时
-  
-  let imageBlob: Blob
-  try {
-    const imageResponse = await fetch(gridImageUrl, { signal: downloadController.signal })
-    clearTimeout(downloadTimeout)
-    if (!imageResponse.ok) {
-      throw new Error(`无法下载九宫格图片: ${gridImageUrl}`)
-    }
-    imageBlob = await imageResponse.blob()
-  } catch (downloadError) {
-    clearTimeout(downloadTimeout)
-    if (downloadError instanceof Error && downloadError.name === 'AbortError') {
-      throw new Error('下载九宫格图片超时')
-    }
-    throw new Error(`下载九宫格图片失败: ${downloadError instanceof Error ? downloadError.message : '未知错误'}`)
-  }
-  
-  // 构建 multipart/form-data 请求
-  const formData = new FormData()
-  formData.append('model', model)
-  formData.append('image', imageBlob, 'grid.jpg')
-  formData.append('prompt', finalPrompt)
-  formData.append('response_format', 'url')
-  formData.append('cfg_scale', '3.0')
-  formData.append('steps', '20')
-
-  // 使用图像编辑 API（阶跃星辰的 step-image-edit），带超时控制
+  // 使用豆包 seedream API（JSON 格式），带超时控制
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 120000) // 2分钟超时
+  const timeoutId = setTimeout(() => controller.abort(), 180000) // 3分钟超时
   
   let response: Response
   try {
-    response = await fetch(`${baseUrl}/images/edits`, {
+    response = await fetch(`${baseUrl}/images/generations`, {
       method: 'POST',
       headers: {
+        'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
-      body: formData,
+      body: JSON.stringify({
+        model,
+        prompt: editPrompt,
+        image: gridImageUrl, // 九宫格原图作为参考
+        sequential_image_generation: 'disabled',
+        response_format: 'url',
+        size: '2K',
+        stream: false,
+        watermark: false,
+      }),
       signal: controller.signal,
     })
   } catch (fetchError) {
@@ -361,7 +340,8 @@ async function processPhase3(
   }
 
   const data = await response.json()
-  const imageUrl = data.data?.[0]?.url || data.images?.[0]?.url
+  // 豆包 API 返回格式可能是 data[0].url 或 data[0].b64_json
+  const imageUrl = data.data?.[0]?.url || data.data?.[0]?.b64_json
   
   if (!imageUrl) {
     console.error('[v0] 阶段三返回数据:', JSON.stringify(data))
@@ -381,6 +361,8 @@ export async function POST(request: NextRequest) {
       visionModel,
       reasoningModel,
       imageModel,
+      imageApiKey,
+      imageBaseUrl,
       phase1Prompt,
       phase2Prompt,
       phase3Prompt,
@@ -391,6 +373,10 @@ export async function POST(request: NextRequest) {
       phase2Result: existingPhase2Result,
       existingEvents,
     } = body
+    
+    // 图像API使用单独的配置，如果没有则使用默认配置
+    const finalImageApiKey = imageApiKey || apiKey
+    const finalImageBaseUrl = imageBaseUrl || 'https://ark.cn-beijing.volces.com/api/v3'
 
     if (!apiKey) {
       return NextResponse.json({ error: '请提供 API Key' }, { status: 400 })
@@ -529,8 +515,8 @@ export async function POST(request: NextRequest) {
 
       try {
         comicImageUrl = await processPhase3(
-          apiKey,
-          baseUrl,
+          finalImageApiKey,
+          finalImageBaseUrl,
           imageModel,
           phase3Prompt,
           phase2Result.diary_text,
