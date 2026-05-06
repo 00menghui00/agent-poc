@@ -151,47 +151,14 @@ export function downloadDataUrl(dataUrl: string, filename: string) {
 }
 
 /**
- * 不规则拼接布局定义
- * 每个区块: { x, y, w, h } 表示在画布上的位置和尺寸（基于单位格子）
- */
-const IRREGULAR_LAYOUTS = [
-  // 布局1: 左上大图 + 右侧小图 + 底部横条
-  [
-    { x: 0, y: 0, w: 2, h: 2 },     // 0: 左上大图
-    { x: 2, y: 0, w: 1, h: 1 },     // 1: 右上小图
-    { x: 2, y: 1, w: 1, h: 1 },     // 2: 右中小图
-    { x: 0, y: 2, w: 1, h: 1 },     // 3: 左下小图
-    { x: 1, y: 2, w: 1, h: 1 },     // 4: 中下小图
-    { x: 2, y: 2, w: 1, h: 1 },     // 5: 右下小图
-  ],
-  // 布局2: 顶部横条 + 中间交错 + 右下大图
-  [
-    { x: 0, y: 0, w: 1, h: 1 },     // 0: 左上
-    { x: 1, y: 0, w: 1, h: 1 },     // 1: 中上
-    { x: 2, y: 0, w: 1, h: 2 },     // 2: 右侧竖图
-    { x: 0, y: 1, w: 2, h: 1 },     // 3: 左中横图
-    { x: 0, y: 2, w: 1, h: 1 },     // 4: 左下
-    { x: 1, y: 2, w: 2, h: 1 },     // 5: 右下横图
-  ],
-  // 布局3: 中心大图 + 四周小图
-  [
-    { x: 0, y: 0, w: 1, h: 1 },     // 0: 左上
-    { x: 1, y: 0, w: 1, h: 1 },     // 1: 中上
-    { x: 2, y: 0, w: 1, h: 1 },     // 2: 右上
-    { x: 0, y: 1, w: 1, h: 2 },     // 3: 左侧竖图
-    { x: 1, y: 1, w: 2, h: 2 },     // 4: 右下大图
-  ],
-]
-
-/**
- * 将多张图片拼接成不规则布局的拼图
+ * 将多张图片拼接成不规则布局的拼图（固定9张图片）
  * @param imageUrls 图片 URL 或 base64 数组
- * @param unitSize 单位格子的尺寸
+ * @param canvasWidth 画布宽度
  * @returns Promise<string> 拼图图片的 base64
  */
 export function createGridImage(
   imageUrls: string[],
-  unitSize: number = 340
+  canvasWidth: number = 1080
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -204,10 +171,14 @@ export function createGridImage(
       return
     }
 
-    const canvasSize = unitSize * 3
+    // 使用6x6网格，总共9张图片的不规则布局
+    const gridUnits = 6
+    const unitSize = canvasWidth / gridUnits
+    const canvasHeight = canvasWidth // 正方形画布
+    
     const canvas = document.createElement('canvas')
-    canvas.width = canvasSize
-    canvas.height = canvasSize
+    canvas.width = canvasWidth
+    canvas.height = canvasHeight
     const ctx = canvas.getContext('2d')
 
     if (!ctx) {
@@ -217,11 +188,25 @@ export function createGridImage(
 
     // 填充背景
     ctx.fillStyle = '#ffffff'
-    ctx.fillRect(0, 0, canvasSize, canvasSize)
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight)
 
-    // 根据图片数量选择合适的布局
-    const layoutIndex = imageUrls.length <= 5 ? 2 : (imageUrls.length <= 6 ? 0 : 1)
-    const layout = IRREGULAR_LAYOUTS[layoutIndex]
+    // 9张图片的不规则布局（基于6x6网格，8格高）
+    const layout9 = [
+      { x: 0, y: 0, w: 4, h: 4 },     // 0: 左上大图（主图，占4x4）
+      { x: 4, y: 0, w: 2, h: 2 },     // 1: 右上小图
+      { x: 4, y: 2, w: 2, h: 2 },     // 2: 右中小图
+      { x: 0, y: 4, w: 2, h: 2 },     // 3: 左下小图
+      { x: 2, y: 4, w: 2, h: 2 },     // 4: 中下小图
+      { x: 4, y: 4, w: 2, h: 2 },     // 5: 右下小图
+      { x: 0, y: 6, w: 2, h: 2 },     // 6: 底左小图（扩展到8格高）
+      { x: 2, y: 6, w: 2, h: 2 },     // 7: 底中小图
+      { x: 4, y: 6, w: 2, h: 2 },     // 8: 底右小图
+    ]
+    
+    // 使用8格高的画布来容纳9张图
+    const actualCanvasHeight = unitSize * 8
+    canvas.height = actualCanvasHeight
+    ctx.fillRect(0, 0, canvasWidth, actualCanvasHeight)
 
     // 加载所有图片
     const loadImage = (url: string): Promise<HTMLImageElement> => {
@@ -234,16 +219,18 @@ export function createGridImage(
       })
     }
 
-    // 确保有足够的图片（不足则循环使用）
+    // 确保有9张图片（不足则循环使用，超出则截取）
     const urls: string[] = []
-    for (let i = 0; i < layout.length; i++) {
+    for (let i = 0; i < 9; i++) {
       urls.push(imageUrls[i % imageUrls.length])
     }
 
     Promise.all(urls.map(loadImage))
       .then(images => {
         images.forEach((img, index) => {
-          const cell = layout[index]
+          if (index >= layout9.length) return
+          
+          const cell = layout9[index]
           const x = cell.x * unitSize
           const y = cell.y * unitSize
           const w = cell.w * unitSize
