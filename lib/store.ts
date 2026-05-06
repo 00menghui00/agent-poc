@@ -144,6 +144,6 @@ export const DEFAULT_API_CONFIG: APIConfig = {
   apiKey: '',
   baseUrl: 'https://api.stepfun.com/v1',
   visionModel: 'step-1o-turbo-vision',
-  reasoningModel: 'step-2-16k',
-  imageModel: 'step-1x-medium', // 图像生成模型
+  reasoningModel: 'step-3',
+  imageModel: 'step-image-edit-2', // 图像编辑模型
 }
