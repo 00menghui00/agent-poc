@@ -21,10 +21,11 @@ pnpm build
 ## GitHub Pages 部署建议
 
 1. 将仓库推送到 GitHub
-2. 在 GitHub Actions 中执行 `pnpm build`
-3. 将 `out/` 目录部署到 GitHub Pages
+2. 在仓库设置里开启 **Pages**
+3. Source 选择 **GitHub Actions**
+4. 推送到分支 `v0/menghui759-5417-807a2827-2` 后，Actions 会自动构建并发布
 
-或者使用你自己的静态站点托管服务直接上传 `out/`。
+如果你需要手动上传，也可以把 `out/` 目录部署到任意静态站点托管服务。
 
 ## 说明
 
