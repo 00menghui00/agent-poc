@@ -2,6 +2,12 @@
 
 这是原项目改造后的纯前端静态版本，适合直接部署到 GitHub Pages。
 
+## 在线访问
+
+静态页面入口：
+
+https://00menghui00.github.io/agent-poc/
+
 ## 特点
 
 - 不依赖后端 API
