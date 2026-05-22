@@ -22,8 +22,9 @@ pnpm build
 
 1. 将仓库推送到 GitHub
 2. 在仓库设置里开启 **Pages**
-3. Source 选择 **GitHub Actions**
-4. 推送到分支 `v0/menghui759-5417-807a2827-2` 后，Actions 会自动构建并发布
+3. Source 选择 **Deploy from a branch**
+4. Branch 选择 `gh-pages`
+5. 推送到分支 `v0/menghui759-5417-807a2827-2` 后，Actions 会自动构建并把静态站点发布到 `gh-pages`
 
 如果你需要手动上传，也可以把 `out/` 目录部署到任意静态站点托管服务。
 
