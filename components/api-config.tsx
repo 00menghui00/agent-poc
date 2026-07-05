@@ -5,14 +5,7 @@ import { Settings, Eye, EyeOff, Save, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { DEFAULT_API_CONFIG, type APIConfig } from "@/lib/store"
 
 interface APIConfigProps {
@@ -23,7 +16,6 @@ interface APIConfigProps {
 export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
   const [showApiKey, setShowApiKey] = useState(false)
   const [localConfig, setLocalConfig] = useState<APIConfig>(config)
-  const [open, setOpen] = useState(false)
 
   useEffect(() => {
     setLocalConfig(config)
@@ -33,7 +25,6 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
     onConfigChange(localConfig)
     // 保存到 localStorage
     localStorage.setItem('api-config', JSON.stringify(localConfig))
-    setOpen(false)
   }
 
   const handleReset = () => {
@@ -43,23 +34,17 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
-          <Settings className="h-4 w-4" />
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Settings className="h-5 w-5" />
-            API 配置
-          </DialogTitle>
-          <DialogDescription>
-            配置 API 连接参数
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4 pt-2">
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Settings className="h-5 w-5" />
+          API 配置
+        </CardTitle>
+        <CardDescription>
+          配置阶跃星辰 API 连接参数
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="apiKey">API Key</Label>
           <div className="relative">
@@ -118,14 +103,14 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
               id="imageModel"
               value={localConfig.imageModel}
               onChange={(e) => setLocalConfig({ ...localConfig, imageModel: e.target.value })}
-              placeholder="图像生成模型名称"
+              placeholder="doubao-seedream-5-0-260128"
             />
-            <p className="text-xs text-muted-foreground">用于生成漫画风格九宫格图片</p>
+            <p className="text-xs text-muted-foreground">用于生成漫画风格九宫格图片（豆包 seedream）</p>
           </div>
         </div>
 
         <div className="border-t pt-4 mt-4">
-          <h4 className="text-sm font-medium mb-3">图像生成 API 配置</h4>
+          <h4 className="text-sm font-medium mb-3">图像生成 API 配置（豆包）</h4>
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="imageApiKey">图像 API Key</Label>
@@ -135,11 +120,11 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
                   type={showApiKey ? "text" : "password"}
                   value={localConfig.imageApiKey || ''}
                   onChange={(e) => setLocalConfig({ ...localConfig, imageApiKey: e.target.value })}
-                  placeholder="请输入图像 API Key"
+                  placeholder="请输入豆包 API Key"
                   className="pr-10"
                 />
               </div>
-              <p className="text-xs text-muted-foreground">如果图像 API 使用不同的 Key，请在此配置</p>
+              <p className="text-xs text-muted-foreground">如果图像API使用不同的Key，请在此配置</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="imageBaseUrl">图像 API Base URL</Label>
@@ -147,9 +132,9 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
                 id="imageBaseUrl"
                 value={localConfig.imageBaseUrl || ''}
                 onChange={(e) => setLocalConfig({ ...localConfig, imageBaseUrl: e.target.value })}
-                placeholder="图像 API 地址"
+                placeholder="https://ark.cn-beijing.volces.com/api/v3"
               />
-              <p className="text-xs text-muted-foreground">图像生成 API 地址</p>
+              <p className="text-xs text-muted-foreground">豆包 API 地址</p>
             </div>
           </div>
         </div>
@@ -164,8 +149,7 @@ export function APIConfigPanel({ config, onConfigChange }: APIConfigProps) {
             重置
           </Button>
         </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+      </CardContent>
+    </Card>
   )
 }

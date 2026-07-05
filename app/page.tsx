@@ -429,7 +429,7 @@ export default function Home() {
     try {
       await runPhase3(phase2Result, gridImageUrl)
     } catch (error) {
-      console.error('阶段三失��:', error)
+      console.error('阶段三失败:', error)
       toast.error(error instanceof Error ? error.message : '阶段三失败')
     } finally {
       setIsProcessing(false)
@@ -454,7 +454,7 @@ export default function Home() {
                 <p className="text-sm text-muted-foreground">视频 → 事件 → 日记 → 漫画</p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-4">
               {/* 气泡开关 */}
               <div className="flex items-center gap-2 px-3 py-2 bg-secondary/50 rounded-lg">
                 <MessageCircle className="h-4 w-4 text-muted-foreground" />
@@ -507,12 +507,6 @@ export default function Home() {
                   )}
                 </Button>
               )}
-              
-              {/* API 配置按钮 */}
-              <APIConfigPanel 
-                config={apiConfig} 
-                onConfigChange={setApiConfig} 
-              />
             </div>
           </div>
         </div>
@@ -524,18 +518,26 @@ export default function Home() {
           {/* Left Column - Configuration */}
           <div className="space-y-6">
             <Tabs defaultValue="upload" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
+              <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="upload">
                   <Sparkles className="h-4 w-4 mr-2" />
                   上传视频
                 </TabsTrigger>
-                <TabsTrigger value="prompts">Prompt 编辑</TabsTrigger>
+                <TabsTrigger value="api">API 配置</TabsTrigger>
+                <TabsTrigger value="prompts">Prompt</TabsTrigger>
               </TabsList>
               
               <TabsContent value="upload" className="mt-4">
                 <VideoUploader 
                   videos={videos} 
                   onVideosChange={setVideos} 
+                />
+              </TabsContent>
+              
+              <TabsContent value="api" className="mt-4">
+                <APIConfigPanel 
+                  config={apiConfig} 
+                  onConfigChange={setApiConfig} 
                 />
               </TabsContent>
               
